@@ -142,22 +142,3 @@ vpush >/dev/null 2>&1 && [ "$(show packages/myapp.json | jq -r .version)" = 3.0 
   && ok "--verify-assets: matching asset -> pushed" || bad "matching asset rejected"
 
 [ "$fail" = 0 ] && echo "PASS push_ref_test" || { echo "FAIL push_ref_test"; exit 1; }
-#!/usr/bin/env bash
-# Register an app's built .debs as a packages/*.json reference in a repository
-# instance and push it: the app's own publishing branch (self mode) or a shared
-# collection repository. Runs scripts/register.sh inside a fresh clone, checks
-# the reference against the TARGET's config before committing — its releases
-# and arches (dists.conf), its owners.conf, and no (package, release, arch)
-# already claimed by another reference file — so one client cannot break a
-# shared repository's next publish. Then commits and pushes, rebasing onto
-# concurrent pushes (other apps publishing at the same time) and retrying.
-#
-# Usage: push-ref.sh --remote <git-url> --branch <branch> --name <pkg>
-#          --dist-dir <dir> --repo <owner/app> --tag <tag>
-#          [--file packages/<x>.json] [--create-branch] [--verify-assets]
-#          [--dists <codenames>] [--aliases <alias:codename...>] [--arches <arches>]
-#          [--author-name <n>] [--author-email <e>]
-# --dists/--aliases/--arches are the workflow inputs of the same names. They are
-# layered over the target's dists.conf exactly as the publish will layer them
-# (scripts/ci-build.sh) — a self-mode branch has no conf/, so they are its only
-# release list.
