@@ -213,6 +213,10 @@ test: ## run the engine's shell tests
 	@fail=0; for t in "$(ENGINE)"/tests/*_test.sh; do echo ">> $$t"; bash "$$t" || fail=1; done; \
 	 [ $$fail -eq 0 ] && echo "✅ all tests passed"
 
+.PHONY: lint
+lint: ## lint the workflows (actionlint, through docker)
+	@docker run --rm -v "$(ENGINE):/repo" -w /repo rhysd/actionlint:latest -color
+
 #==========================================================================================
 #  Help
 #==========================================================================================
