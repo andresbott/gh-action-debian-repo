@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://ansible-autobott.github.io/debian-repo/schema/package.schema.json",
-  "title": "autobott APT package entry",
-  "description": "A package reference under packages/. Names one package at ONE version and references that version's .deb artifacts; the publish CI downloads and verifies them. Usually one file per app (packages/<name>.json), but the filename is free and several files MAY name the same package — that is how an app ships a different version to different suites (packages/klassy.trixie.json, packages/klassy.sid.json). All files are merged at publish time; the only uniqueness rule, enforced by hydrate rather than here, is that no two artifacts across all of packages/ and debs/ claim the same (package, release, arch).",
+  "$id": "https://raw.githubusercontent.com/andresbott/gh-action-debian-repo/main/schema/package.schema.json",
+  "title": "APT repository package reference",
+  "description": "A package reference under packages/. Names one package at ONE version and references that version's .deb artifacts; the publish CI downloads and verifies them. Usually one file per app (packages/<name>.json), but the filename is free and several files MAY name the same package — that is how an app ships a different version to different suites (packages/myapp.trixie.json, packages/myapp.sid.json). All files are merged at publish time; the only uniqueness rule, enforced by hydrate rather than here, is that no two artifacts across all of packages/ and debs/ claim the same (package, release, arch).",
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "version", "artifacts"],

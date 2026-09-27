@@ -1,5 +1,8 @@
 # tests/helpers.sh — shared helpers for shell integration tests. Source, don't run.
 # shellcheck shell=bash
+# Tests must not pick up the identity of whatever repo runs them: in Actions,
+# GITHUB_REPOSITORY would otherwise rename every derived file (instance-lib.sh).
+unset GITHUB_REPOSITORY
 need(){ for c in "$@"; do command -v "$c" >/dev/null 2>&1 || { echo "⚠️  skipping: missing '$c'"; exit 0; }; done; }
 
 # make_deb <outdir> <name> <version> <arch> [tag] -> prints built .deb path
@@ -33,4 +36,15 @@ Name-Email: $2
 Expire-Date: 0
 %commit
 EOF
+}
+
+# make_instance <dir> — an empty instance (conf/, packages/) and point INSTANCE at
+# it, so no test ever reads the packages/ or conf/ of the checkout it runs in
+make_instance(){ mkdir -p "$1/conf" "$1/packages"; INSTANCE="$1"; export INSTANCE; }
+
+# make_expired_key <gnupghome> <email> — a signing key that expired in 2021
+make_expired_key(){
+  install -d -m 700 "$1"
+  GNUPGHOME="$1" gpg --batch --pinentry-mode loopback --passphrase '' --faked-system-time 20200101T000000 \
+    --quick-generate-key "expired <$2>" default sign 2021-01-01 >/dev/null 2>&1
 }

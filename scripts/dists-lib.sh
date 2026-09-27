@@ -1,5 +1,6 @@
-# Shared loader + validation for conf/dists.conf. Source this, then call
-# dists_load. Sourced by hydrate.sh, gen-index.sh, render-index.sh.
+# Shared loader + validation for a dists.conf (the instance's conf/dists.conf,
+# else the engine's defaults/dists.conf — resolved by instance_init). Source
+# this, then call dists_load "$DISTS_CONF".
 # shellcheck shell=bash
 
 dists_has() { local d; for d in $DISTS; do [ "$d" = "$1" ] && return 0; done; return 1; }
@@ -34,7 +35,7 @@ dists_validate() {
 }
 
 dists_load() {
-  local conf="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/conf/dists.conf}"
+  local conf="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/defaults/dists.conf}"
   [ -f "$conf" ] || { echo "❌ missing config: $conf" >&2; return 1; }
   # shellcheck disable=SC1090
   . "$conf"

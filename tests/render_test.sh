@@ -3,6 +3,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; . "$ROOT/tests/helpers.sh"
 need dpkg-deb apt-ftparchive gpg
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+make_instance "$tmp/instance"
 conf="$tmp/dists.conf"; printf 'DISTS="bookworm trixie"\nALIASES="stable:bookworm testing:trixie"\nARCHES="amd64 arm64"\n' > "$conf"
 site="$tmp/_site"; debs="$tmp/debs"
 make_deb "$debs" widget 1.0 amd64 any >/dev/null       # any -> both suites (identical bytes)
@@ -11,7 +12,7 @@ make_deb "$debs/bookworm" gadget 2.0 amd64 bk >/dev/null
 # distinct sha256), exercising the per-release download grouping.
 make_deb "$debs/bookworm" foo 1.0 amd64 foo-bkw >/dev/null
 make_deb "$debs/trixie"   foo 1.0 amd64 foo-trx >/dev/null
-# bar ships a DIFFERENT VERSION per release (the klassy shape: stable's libraries
+# bar ships a DIFFERENT VERSION per release (the myapp shape: stable's libraries
 # can only build an older upstream). It is still one package and must be listed
 # once, not as "bar 1.2.0" plus a separate "bar 2.0.0" entry.
 make_deb "$debs/bookworm" bar 1.2.0-1~bookworm amd64 bar-bkw >/dev/null
@@ -21,9 +22,9 @@ make_deb "$debs/trixie"   bar 2.0.0-1~trixie   amd64 bar-trx >/dev/null
 # describes the trixie group, so the version must move onto each download link.
 make_deb "$debs/trixie" baz 3.0.0-1 amd64 baz-a >/dev/null
 make_deb "$debs/trixie" baz 3.1.0-1 arm64 baz-b >/dev/null
-export GNUPGHOME="$tmp/gnupg"; make_test_key "$GNUPGHOME" contact@andresbott.com
+export GNUPGHOME="$tmp/gnupg"; make_test_key "$GNUPGHOME" test@example.org
 DISTS_CONF="$conf" "$ROOT/scripts/hydrate.sh" "$site" "$debs"
-DISTS_CONF="$conf" "$ROOT/scripts/gen-index.sh" "$site" "$ROOT/conf/apt-ftparchive.conf" contact@andresbott.com
+DISTS_CONF="$conf" "$ROOT/scripts/gen-index.sh" "$site"
 DISTS_CONF="$conf" "$ROOT/scripts/render-index.sh" "$site"
 
 fail=0
@@ -117,16 +118,16 @@ done
 ord_conf="$tmp/ord.conf"
 printf 'DISTS="trixie forky sid"\nALIASES="stable:trixie testing:forky unstable:sid"\nARCHES="amd64"\n' > "$ord_conf"
 ord_site="$tmp/_ord"; ord_debs="$tmp/ord_debs"
-make_deb "$ord_debs/trixie" klassy '6.5.3-1~trixie' amd64 t >/dev/null
-make_deb "$ord_debs/forky"  klassy '6.7.2-1~forky'  amd64 f >/dev/null
-make_deb "$ord_debs/sid"    klassy '6.7.2-1~sid'    amd64 s >/dev/null
+make_deb "$ord_debs/trixie" myapp '6.5.3-1~trixie' amd64 t >/dev/null
+make_deb "$ord_debs/forky"  myapp '6.7.2-1~forky'  amd64 f >/dev/null
+make_deb "$ord_debs/sid"    myapp '6.7.2-1~sid'    amd64 s >/dev/null
 DISTS_CONF="$ord_conf" "$ROOT/scripts/hydrate.sh" "$ord_site" "$ord_debs" >/dev/null
-DISTS_CONF="$ord_conf" "$ROOT/scripts/gen-index.sh" "$ord_site" "$ROOT/conf/apt-ftparchive.conf" contact@andresbott.com >/dev/null
+DISTS_CONF="$ord_conf" "$ROOT/scripts/gen-index.sh" "$ord_site" >/dev/null
 DISTS_CONF="$ord_conf" "$ROOT/scripts/render-index.sh" "$ord_site"
-klassy_row=$(grep '<code>klassy</code>' "$ord_site/index.html")
-got=$(printf '%s' "$klassy_row" | grep -o 'class="rel">[a-z]*' | awk -F'>' '{print $2}' | tr '\n' ' ')
+myapp_row=$(grep '<code>myapp</code>' "$ord_site/index.html")
+got=$(printf '%s' "$myapp_row" | grep -o 'class="rel">[a-z]*' | awk -F'>' '{print $2}' | tr '\n' ' ')
 [ "$got" = "trixie forky sid " ] || { echo "❌ summary release tags must follow DISTS order, got: $got"; fail=1; }
-got=$(printf '%s' "$klassy_row" | grep -o 'class="rel-h">[a-z]*' | awk -F'>' '{print $2}' | tr '\n' ' ')
+got=$(printf '%s' "$myapp_row" | grep -o 'class="rel-h">[a-z]*' | awk -F'>' '{print $2}' | tr '\n' ' ')
 [ "$got" = "trixie forky sid " ] || { echo "❌ download groups must follow DISTS order, got: $got"; fail=1; }
 
 # A genuinely empty repo has nothing installable in any release, so NO suite is
@@ -136,5 +137,22 @@ empty="$tmp/_empty"; mkdir -p "$empty"
 DISTS_CONF="$conf" "$ROOT/scripts/render-index.sh" "$empty" >/dev/null 2>&1
 grep -q 'id="su-' "$empty/index.html" && { echo "❌ empty repo must offer no selectable suites"; fail=1; }
 grep -q 'No releases published yet' "$empty/index.html" || { echo "❌ empty repo should show the 'no releases' note in place of the picker"; fail=1; }
+
+# Site values are HTML-escaped and inserted literally: an '&' in a title must
+# not turn into the matched token (bash 5.2 ${//} semantics) nor stay a raw '&'.
+# A theme is raw CSS and goes in verbatim — CSS nesting legitimately uses '&'.
+make_instance "$tmp/amp"
+printf 'SITE_TITLE="R&D <debs>"\nSITE_TAGLINE="Tools & more"\nTHEME=nested\n' > "$tmp/amp/conf/site.conf"
+mkdir -p "$tmp/amp/conf/themes"; printf ':root { --accent: #123456; }\n.pkg { & summary { color: red; } }\n' > "$tmp/amp/conf/themes/nested.css"
+DISTS_CONF="$conf" "$ROOT/scripts/render-index.sh" "$site" 2>/dev/null
+grep -q '<h1 class="wordmark">R&amp;D &lt;debs&gt;</h1>' "$site/index.html" || { echo "❌ SITE_TITLE not escaped literally"; fail=1; }
+grep -q 'Tools &amp; more, built for' "$site/index.html" || { echo "❌ SITE_TAGLINE not escaped literally"; fail=1; }
+grep -q '@@' "$site/index.html" && { echo "❌ unreplaced or re-inserted @@TOKEN@@ in the page"; fail=1; }
+grep -qF '.pkg { & summary { color: red; } }' "$site/index.html" || { echo "❌ instance theme CSS not inserted verbatim"; fail=1; }
+# THEME from the environment beats site.conf; an unknown one warns and keeps violet
+DISTS_CONF="$conf" THEME=teal "$ROOT/scripts/render-index.sh" "$site" 2>/dev/null
+grep -qF '& summary' "$site/index.html" && { echo "❌ THEME env must win over site.conf"; fail=1; }
+warn=$(DISTS_CONF="$conf" THEME=nope "$ROOT/scripts/render-index.sh" "$site" 2>&1 >/dev/null)
+printf '%s' "$warn" | grep -q "unknown theme 'nope'" || { echo "❌ unknown theme should warn, got: $warn"; fail=1; }
 
 [ "$fail" = 0 ] && echo "PASS render_test" || { echo "FAIL render_test"; exit 1; }

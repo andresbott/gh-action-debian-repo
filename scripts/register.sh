@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# Generate (and validate) a packages/<name>.json reference for the autobott
-# APT repo from an app's built .deb files. Git operations are the caller's job
-# (the composite action commits+pushes; a maintainer commits by hand locally).
+# Generate (and validate) a packages/<name>.json reference from an app's built
+# .deb files. Git operations are the caller's job (scripts/push-ref.sh commits
+# and pushes it for the register action; a maintainer commits by hand locally).
 #
 # The version is read from the .deb's own control field, not from --tag: a tag
-# need not be a bare version (klassy-deb tags `debian_sid-v6.7.2`) and a suite
+# need not be a bare version (an app may tag `debian_sid-v6.7.2`) and a suite
 # suffix or packaging revision only exists in the .deb (6.7.2-1~sid). hydrate.sh
 # cross-checks name/version/arch against every downloaded .deb, so anything
 # derived from the tag would be rejected there. --tag only builds the asset URL.
@@ -38,6 +38,11 @@ for d in "$DIST_DIR"/*.deb;  do rels+=("any"); debs+=("$d"); done          # bar
 for sub in "$DIST_DIR"/*/;   do [ -d "$sub" ] || continue; r=$(basename "$sub")
   for d in "$sub"*.deb; do rels+=("$r"); debs+=("$d"); done; done
 [ ${#debs[@]} -gt 0 ] || { echo "❌ no .deb files in '$DIST_DIR' (flat or dist/<release>/)" >&2; exit 1; }
+# the asset URL is <release download>/<file name>: a release's assets are one flat
+# namespace, so the same file name under two release dirs would be one URL
+dupname=$(for d in "${debs[@]}"; do basename "$d"; done | sort | uniq -d | head -1)
+[ -z "$dupname" ] || { echo "❌ '$dupname' appears in several release dirs — each .deb needs its own" >&2
+  echo "   release asset name (same release asset name = same URL), e.g. a ~<release> version suffix" >&2; exit 1; }
 
 # Every .deb must belong to this package and carry the same Version: one package
 # file describes exactly one version (the schema has a single `version`, and
@@ -74,18 +79,16 @@ jq -n --arg name "$NAME" --arg version "$ver" --argjson artifacts "$artifacts" \
   '{name:$name, version:$version, artifacts:$artifacts}' > "$OUT"
 echo "✅ wrote $OUT ($NAME $ver, $(echo "$artifacts" | jq length) artifact(s))"
 
-# validate against the repo's schema when the validator is available
+# validate against the engine's schema (scripts/jsonschema.sh: check-jsonschema,
+# else uvx); skipped with a warning only when neither is available
 SCHEMA="$(cd "$(dirname "$0")/.." && pwd)/schema/package.schema.json"
-if command -v check-jsonschema >/dev/null 2>&1; then
-  # capture output so a clean pass stays quiet, but surface the errors on a
-  # failure (otherwise set -e aborts here with no clue why).
-  if err=$(check-jsonschema --schemafile "$SCHEMA" "$OUT" 2>&1); then
-    echo "✅ validates against schema"
-  else
-    printf '%s\n' "$err" >&2
-    echo "❌ $OUT failed schema validation against $SCHEMA" >&2
-    exit 1
-  fi
-else
-  echo "⚠️  check-jsonschema not found — skipping local validation (CI validates too)"
-fi
+# capture output so a clean pass stays quiet, but surface the errors on a
+# failure (otherwise set -e aborts here with no clue why).
+rc=0; err=$("$(dirname "$0")/jsonschema.sh" --schemafile "$SCHEMA" "$OUT" 2>&1) || rc=$?
+case "$rc" in
+  0)   echo "✅ validates against schema";;
+  127) echo "⚠️  check-jsonschema not found — skipping local validation (the publish build validates too)";;
+  *)   printf '%s\n' "$err" >&2
+       echo "❌ $OUT failed schema validation against $SCHEMA" >&2
+       exit 1;;
+esac

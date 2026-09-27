@@ -1,29 +1,25 @@
 #!/usr/bin/env bash
-# Render the landing page into <site>/index.html from the index.html template:
-# inject the packages table (built from the generated binary-*/Packages indexes),
-# substitute the @@TOKENS@@ from conf/site.conf, and apply the selected colour
-# theme (conf/themes/<name>.css). THEME may be overridden from the environment
-# (e.g. the Makefile's `make build THEME=teal`).
+# Render the landing page into <site>/index.html from the instance's template
+# (conf/index.html, else the engine's template/index.html): inject the packages
+# table (built from the generated binary-*/Packages indexes), substitute the
+# @@TOKENS@@ from the repository identity (conf/site.conf + derived defaults,
+# see instance-lib.sh site_load), and apply the selected colour theme
+# (conf/themes/<name>.css, else template/themes/<name>.css). THEME may be
+# overridden from the environment (e.g. `make build THEME=teal`).
 #
 # When the pool is empty the table falls back to a "No packages published yet."
 # notice — unless DEMO_WHEN_EMPTY is set, in which case sample/demo rows are shown
-# instead. That demo mode is used by `make serve` to preview the design of an
-# empty repository locally; it is never invoked by the build, so the published
-# site never contains the sample rows.
+# instead. That demo mode is used by `make preview`/`make serve` to preview the
+# design of an empty repository locally; it is never invoked by the build, so the
+# published site never contains the sample rows.
 #
-# Usage: render-index.sh <site>
-# (architectures for the tagline come from conf/dists.conf, not argv — see below)
+# Usage: render-index.sh <site>   (env: INSTANCE, DISTS_CONF, SITE_CONF, INDEX_TEMPLATE, THEME)
 set -euo pipefail
 
-SITE="${1:?site dir}"; shift || true
-ARCHES=("$@")
-[ ${#ARCHES[@]} -gt 0 ] || ARCHES=(amd64 arm64)
-
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-. "$(dirname "$0")/dists-lib.sh"; dists_load "${DISTS_CONF:-$ROOT/conf/dists.conf}"
-# DISTS/ARCHES now hold the config's values. gen-index.sh calls this script
-# with $SITE only (no arch args), so the tagline's arches must come from
-# config, not "$@" — this supersedes the positional-args fallback above.
+SITE="${1:?site dir}"
+. "$(dirname "$0")/instance-lib.sh"; instance_init
+. "$(dirname "$0")/dists-lib.sh"; dists_load "$DISTS_CONF"
+site_load
 read -ra ARCHES <<< "$ARCHES"
 
 # extract one TSV line per stanza from every configured codename's generated
@@ -171,17 +167,11 @@ else
   body='      <p class="empty">No packages published yet.</p>'
 fi
 
-# --- site config (conf/site.conf), with THEME overridable from the env ---
-theme_env="${THEME:-}"
-[ -f "$ROOT/conf/site.conf" ] && . "$ROOT/conf/site.conf"
-[ -n "$theme_env" ] && THEME="$theme_env"
-: "${SITE_TITLE:=autobott}"
-: "${SITE_TAGLINE:=A signed APT repository for Debian and Ubuntu}"
-: "${REPO_URL:=https://ansible-autobott.github.io/debian-repo}"
-: "${GITHUB_URL:=https://github.com/ansible-autobott/debian-repo}"
-: "${KEYRING_FILE:=autobott-archive-keyring.gpg}"
-: "${SOURCES_FILE:=autobott.sources}"
-: "${THEME:=violet}"
+# HTML-escape for text and double-quoted attribute values. The '\&' in each
+# replacement is required: bash 5.2+ treats a bare '&' in a ${//} replacement as
+# the matched text (see the marker-split note below), which would drop the
+# entity's ampersand. '&' must be escaped first.
+htesc() { local s=$1; s=${s//&/\&amp;}; s=${s//</\&lt;}; s=${s//>/\&gt;}; s=${s//\"/\&quot;}; printf '%s' "$s"; }
 
 gh="${GITHUB_URL#http://}"; gh="${gh#https://}"   # link label without the scheme
 
@@ -192,23 +182,22 @@ for a in "${ARCHES[@]}"; do
   if [ "$i" -gt 1 ]; then
     if [ "$i" -eq "$n" ] && [ "$n" -eq 2 ]; then arches_html+=" and "; else arches_html+=", "; fi
   fi
-  arches_html+="<code>$a</code>"
+  arches_html+="<code>$(htesc "$a")</code>"
 done
 
 # colour theme: violet is built into the template; alternates are CSS files
 theme_css=""
 if [ "$THEME" != "violet" ]; then
-  tf="$ROOT/conf/themes/$THEME.css"
-  if [ -f "$tf" ]; then theme_css="$(cat "$tf")"
-  else echo "⚠️  unknown theme '$THEME' (no $tf) — using built-in violet" >&2; fi
+  if tf="$(theme_file "$THEME")"; then theme_css="$(cat "$tf")"
+  else echo "⚠️  unknown theme '$THEME' (no conf/themes/$THEME.css in the instance or engine) — using built-in violet" >&2; fi
 fi
 
 # --- "Add the repository" step: a CSS-only suite picker (issue #2) ---
 # One radio per publishable suite — the rolling aliases first (each showing its
 # target codename as a sub-label), then the real codenames — each revealing an
-# inline snippet that writes autobott.sources with that suite's Suites: value.
+# inline snippet that writes $SOURCES_FILE with that suite's Suites: value.
 # Pure CSS + static markup so it works on GitHub Pages; the copy-button JS
-# enhances every block unchanged. Suites come from conf/dists.conf, so adding a
+# enhances every block unchanged. Suites come from the dists.conf, so adding a
 # release or alias needs no template edit.
 #
 # A suite is offered only when its release carries at least one package: a
@@ -216,10 +205,6 @@ fi
 # releases are a dead end to install from, so we hide them (aliases included).
 # The populated set is the codenames (field 1) seen in the aggregated $tsv above;
 # in demo mode $tsv is empty, so demo_cn stands in for the placeholder content.
-# HTML-escape for <code> text. The '\&' in each replacement is required: bash 5.2+
-# treats a bare '&' in a ${//} replacement as the matched text (see the marker-split
-# note below), which would drop the entity's ampersand. '&' must be escaped first.
-htesc() { local s=$1; s=${s//&/\&amp;}; s=${s//</\&lt;}; s=${s//>/\&gt;}; printf '%s' "$s"; }
 
 populated_cn=" $(printf '%s\n' "$tsv" | awk -F'\t' 'NF{print $1}' | sort -u | tr '\n' ' ') "
 [ -n "$demo_cn" ] && populated_cn=" $demo_cn "
@@ -267,19 +252,24 @@ $su_rules        </style>
 fi
 
 # --- substitute tokens + packages table + theme into the template ---
-content="$(cat "$ROOT/index.html")"
-content=${content//'@@SITE_TITLE@@'/$SITE_TITLE}
-content=${content//'@@SITE_TAGLINE@@'/$SITE_TAGLINE}
-content=${content//'@@REPO_URL@@'/$REPO_URL}
-content=${content//'@@KEYRING_FILE@@'/$KEYRING_FILE}
-content=${content//'@@SOURCES_FILE@@'/$SOURCES_FILE}
-content=${content//'@@GITHUB_URL@@'/$GITHUB_URL}
-content=${content//'@@GITHUB_LABEL@@'/$gh}
-content=${content//'@@ARCHES@@'/$arches_html}
+# Every value is HTML-escaped (a site title may well contain '&') and the
+# replacement is QUOTED: bash 5.2+ treats an unquoted '&' in a ${//} replacement
+# as the matched text, so an unquoted "R&D" would render as "R@@SITE_TITLE@@D".
+[ -f "$INDEX_TEMPLATE" ] || { echo "❌ missing page template: $INDEX_TEMPLATE" >&2; exit 1; }
+content="$(cat "$INDEX_TEMPLATE")"
+tok() { local v; v="$(htesc "$2")"; content=${content//"@@$1@@"/"$v"}; }
+tok SITE_TITLE   "$SITE_TITLE"
+tok SITE_TAGLINE "$SITE_TAGLINE"
+tok REPO_URL     "$REPO_URL"
+tok KEYRING_FILE "$KEYRING_FILE"
+tok SOURCES_FILE "$SOURCES_FILE"
+tok GITHUB_URL   "$GITHUB_URL"
+tok GITHUB_LABEL "$gh"
+content=${content//'@@ARCHES@@'/"$arches_html"}
 # Inject the table by splitting on the marker instead of ${//}: bash 5.2+ treats
 # an unescaped '&' in a ${//} replacement as the matched text, which would corrupt
 # any package field escaped to an HTML entity (& < > -> &amp; &lt; &gt;).
 content="${content%%'<!-- PACKAGES_TABLE -->'*}${body}${content#*'<!-- PACKAGES_TABLE -->'}"
 content="${content%%'<!-- ADD_REPO -->'*}${add_repo}${content#*'<!-- ADD_REPO -->'}"
-content=${content//'/* @@THEME@@ */'/$theme_css}
+content=${content//'/* @@THEME@@ */'/"$theme_css"}
 printf '%s\n' "$content" > "$SITE/index.html"

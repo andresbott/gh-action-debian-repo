@@ -1,17 +1,19 @@
 #!/usr/bin/env bash
-# Assemble <site>/pool/<codename>/main from two sources:
+# Assemble <site>/pool/<codename>/main for the instance ($INSTANCE, default: the
+# current directory) from two sources:
 #   1. packages/*.json  — download each referenced .deb, verify sha256, cross-check
 #      control fields, and place it into the pool of every release it targets.
 #   2. debs/<release>/*.deb (and bare debs/*.deb = "any") — committed binaries.
-# Releases come from conf/dists.conf; "any" expands to every configured codename.
+# Releases come from the instance's dists.conf; "any" expands to every configured
+# codename.
 # Fails hard on any mismatch so a partial/incorrect set is never published.
+# Usage: hydrate.sh [site] [debs-dir]   (env: INSTANCE, PKG_DIR, DEBS_DIR, DISTS_CONF)
 set -euo pipefail
 
 SITE="${1:-_site}"
-ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-LOCAL_DIR="${2:-$ROOT/debs}"
-PKG_DIR="$ROOT/packages"
-. "$(dirname "$0")/dists-lib.sh"; dists_load "${DISTS_CONF:-$ROOT/conf/dists.conf}"
+. "$(dirname "$0")/instance-lib.sh"; instance_init
+. "$(dirname "$0")/dists-lib.sh"; dists_load "$DISTS_CONF"
+LOCAL_DIR="${2:-$DEBS_DIR}"
 
 rm -rf "$SITE/pool"; for cn in $DISTS; do mkdir -p "$SITE/pool/$cn/main"; done
 declare -A origin
@@ -42,7 +44,7 @@ guard() { # <pkg> <codename> <arch> <source>  — fail on a repeated (pkg,codena
 
 shopt -s nullglob
 json_files=("$PKG_DIR"/*.json)
-if [ ${#json_files[@]} -eq 0 ]; then echo "⚠️  no package files in packages/"; else
+if [ ${#json_files[@]} -eq 0 ]; then echo "⚠️  no package files in $PKG_DIR"; else
   for f in "${json_files[@]}"; do
     name=$(jq -r '.name' "$f"); version=$(jq -r '.version' "$f"); count=$(jq '.artifacts | length' "$f")
     echo ">> $name $version ($(basename "$f"))"

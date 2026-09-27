@@ -3,6 +3,7 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; . "$ROOT/tests/helpers.sh"
 need dpkg-deb
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
+make_instance "$tmp/instance"
 conf="$tmp/dists.conf"; printf 'DISTS="bookworm trixie"\nALIASES="stable:bookworm"\nARCHES="amd64 arm64"\n' > "$conf"
 site="$tmp/_site"; debs="$tmp/debs"
 
@@ -41,17 +42,17 @@ else
     || { echo "❌ collision message must name both sources, got: $err"; fail=1; }
 fi
 
-# Same package name, DIFFERENT version per release (the klassy shape) must merge:
+# Same package name, DIFFERENT version per release (the myapp shape) must merge:
 # one version for bookworm, another for trixie. Different releases never collide,
 # so both land — this is what lets an app publish per-suite versions.
 site4="$tmp/_site4"; debs4="$tmp/debs4"
-make_deb "$debs4/bookworm" klassy '6.5.3-1~bookworm' amd64 bkw >/dev/null
-make_deb "$debs4/trixie"   klassy '6.7.2-1~trixie'   amd64 trx >/dev/null
+make_deb "$debs4/bookworm" myapp '6.5.3-1~bookworm' amd64 bkw >/dev/null
+make_deb "$debs4/trixie"   myapp '6.7.2-1~trixie'   amd64 trx >/dev/null
 if DISTS_CONF="$conf" "$ROOT/scripts/hydrate.sh" "$site4" "$debs4" >/dev/null 2>&1; then
-  [ -f "$site4/pool/bookworm/main/k/klassy/klassy_6.5.3-1~bookworm_amd64.deb" ] \
-    || { echo "❌ klassy 6.5.3 missing from bookworm pool"; fail=1; }
-  [ -f "$site4/pool/trixie/main/k/klassy/klassy_6.7.2-1~trixie_amd64.deb" ] \
-    || { echo "❌ klassy 6.7.2 missing from trixie pool"; fail=1; }
+  [ -f "$site4/pool/bookworm/main/m/myapp/myapp_6.5.3-1~bookworm_amd64.deb" ] \
+    || { echo "❌ myapp 6.5.3 missing from bookworm pool"; fail=1; }
+  [ -f "$site4/pool/trixie/main/m/myapp/myapp_6.7.2-1~trixie_amd64.deb" ] \
+    || { echo "❌ myapp 6.7.2 missing from trixie pool"; fail=1; }
 else
   echo "❌ hydrate must accept one package at a different version per release"; fail=1
 fi

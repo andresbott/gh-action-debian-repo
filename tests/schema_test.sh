@@ -7,14 +7,16 @@ set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 SCHEMA="$ROOT/schema/package.schema.json"
 
-command -v check-jsonschema >/dev/null 2>&1 || {
-  echo "❌ check-jsonschema not found (pip install check-jsonschema)"; exit 1; }
+# check-jsonschema, else uvx check-jsonschema (see scripts/jsonschema.sh)
+cjs(){ "$ROOT/scripts/jsonschema.sh" "$@"; }
+cjs --version >/dev/null 2>&1 || {
+  echo "❌ check-jsonschema not found (pip install check-jsonschema, or install uv)"; exit 1; }
 
 fail=0
 shopt -s nullglob
 
 for f in "$ROOT"/tests/fixtures/valid/*.json; do
-  if check-jsonschema --schemafile "$SCHEMA" "$f" >/dev/null 2>&1; then
+  if cjs --schemafile "$SCHEMA" "$f" >/dev/null 2>&1; then
     echo "✅ valid:   $(basename "$f")"
   else
     echo "❌ expected VALID but was rejected:   $(basename "$f")"; fail=1
@@ -22,7 +24,7 @@ for f in "$ROOT"/tests/fixtures/valid/*.json; do
 done
 
 for f in "$ROOT"/tests/fixtures/invalid/*.json; do
-  if check-jsonschema --schemafile "$SCHEMA" "$f" >/dev/null 2>&1; then
+  if cjs --schemafile "$SCHEMA" "$f" >/dev/null 2>&1; then
     echo "❌ expected INVALID but was accepted: $(basename "$f")"; fail=1
   else
     echo "✅ invalid: $(basename "$f") (correctly rejected)"
