@@ -217,6 +217,11 @@ test: ## run the engine's shell tests
 lint: ## lint the workflows (actionlint, through docker)
 	@docker run --rm -v "$(ENGINE):/repo" -w /repo rhysd/actionlint:latest -color
 
+.PHONY: release
+release: ## tag an engine release (pins the workflow's engine-ref; never pushes): make release VERSION=v1.2.3
+	@[ "$(VERSION)" ] || { echo ">> usage: make release VERSION=vX.Y.Z[-rc.N]"; exit 1; }
+	@$(SCRIPTS)/release.sh "$(VERSION)"
+
 #==========================================================================================
 #  Help
 #==========================================================================================
