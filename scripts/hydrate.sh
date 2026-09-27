@@ -5,14 +5,15 @@
 #      control fields, and place it into the pool of every release it targets.
 #   2. debs/<release>/*.deb (and bare debs/*.deb = "any") — committed binaries.
 # Releases come from the instance's dists.conf; "any" expands to every configured
-# codename.
+# codename. When conf/owners.conf exists, every reference must pass it first.
 # Fails hard on any mismatch so a partial/incorrect set is never published.
-# Usage: hydrate.sh [site] [debs-dir]   (env: INSTANCE, PKG_DIR, DEBS_DIR, DISTS_CONF)
+# Usage: hydrate.sh [site] [debs-dir]   (env: INSTANCE, PKG_DIR, DEBS_DIR, DISTS_CONF, OWNERS_CONF)
 set -euo pipefail
 
 SITE="${1:-_site}"
 . "$(dirname "$0")/instance-lib.sh"; instance_init
 . "$(dirname "$0")/dists-lib.sh"; dists_load "$DISTS_CONF"
+. "$(dirname "$0")/owners-lib.sh"; owners_load "$OWNERS_CONF"
 LOCAL_DIR="${2:-$DEBS_DIR}"
 
 rm -rf "$SITE/pool"; for cn in $DISTS; do mkdir -p "$SITE/pool/$cn/main"; done
@@ -44,6 +45,9 @@ guard() { # <pkg> <codename> <arch> <source>  — fail on a repeated (pkg,codena
 
 shopt -s nullglob
 json_files=("$PKG_DIR"/*.json)
+# ownership is checked for every reference before anything is downloaded
+for f in "${json_files[@]}"; do owners_check_ref "$f" || exit 1; done
+if [ "$OWNERS_ENFORCED" = 1 ] && [ ${#json_files[@]} -gt 0 ]; then echo "✅ all references pass owners.conf"; fi
 if [ ${#json_files[@]} -eq 0 ]; then echo "⚠️  no package files in $PKG_DIR"; else
   for f in "${json_files[@]}"; do
     name=$(jq -r '.name' "$f"); version=$(jq -r '.version' "$f"); count=$(jq '.artifacts | length' "$f")
