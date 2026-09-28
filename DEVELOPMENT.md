@@ -251,6 +251,11 @@ the file are unknown to it. Rotation relies on that:
    Clients that never re-downloaded the keyring stop verifying at this point.
    apt has no key-update channel, so plan phase 1 long enough.
 
+In self mode, "publish" without a new release means calling the workflow in
+publish-only mode with `instance-ref: apt` and the release workflow's build
+inputs (see the README). A publish-only run without `instance-ref` builds the
+branch it runs on, which holds no references, and deploys an empty repository.
+
 `make key-to-repo` first prints the fingerprint and uid of every secret key it
 is about to upload, so you can check that a retired key is really gone.
 
@@ -271,7 +276,12 @@ into `GNUPGHOME`, then `make key-to-repo`.
 - **In a collection**, `owners.conf` limits each package to its listed
   repositories and their release URLs. The register step rejects a reference the
   target would reject. The build re-checks everything anyway, so a hand-edited
-  reference is caught before download.
+  reference is caught before download. These checks stop honest mistakes, not a
+  malicious client: every client holds the App key (or the collection token),
+  which is `contents: write` on the whole collection, so it could edit
+  `conf/owners.conf` or `conf/index.html` directly. For a hard boundary, add a
+  push ruleset to the collection that blocks changes outside `packages/**`, with
+  only the maintainers allowed to bypass it.
 - **Tokens**: App tokens are scoped to the one collection repository. Tokens
   never reach a URL, a command line or the log.
 

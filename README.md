@@ -89,6 +89,33 @@ jobs:
 The repository goes live at `https://acme.github.io/myapp`, and its landing page
 shows the install commands.
 
+To rebuild and redeploy it without a new release (after a key rotation, for
+example), call the workflow in publish-only mode on the `apt` branch. Without
+`instance-ref: apt` it would build the branch the run is for, which holds your
+code and no references, and deploy an empty repository:
+
+```yaml
+# acme/myapp: .github/workflows/apt-republish.yml
+on: workflow_dispatch
+
+jobs:
+  apt:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    uses: andresbott/gh-action-debian-repo/.github/workflows/publish.yml@v1
+    with:
+      instance-ref: apt                          # the self-branch holding the references
+      dists: bookworm trixie                     # the same build inputs as the release workflow
+      aliases: stable:trixie
+      arches: amd64 arm64
+    secrets: inherit
+```
+
+Run it from the default branch: the `github-pages` environment lets only the
+default branch and the release tags deploy.
+
 ## Collection mode: many projects, one repository
 
 **The collection** (for example `acme/apt`) is an instance repository:
@@ -175,7 +202,13 @@ collection:
 - no other reference, and no `.deb` committed in its `debs/`, already providing the same (package, release, arch)
 - every release asset is publicly downloadable and matches its sha256
 
-One bad client therefore cannot break the next publish for everyone.
+These checks keep an honest mistake (a wrong release, a missing asset, someone
+else's package name) from breaking the next publish for everyone. They are not
+a security boundary. Every client holds the App key, which is `contents: write`
+on the whole collection, so a malicious client could edit `conf/owners.conf` or
+`conf/index.html` directly. For a hard boundary, add a push ruleset to the
+collection that blocks changes outside `packages/**`, and let only the
+maintainers bypass it.
 
 A fine-grained token that can push to the collection also works: pass it as the
 `collection-token` secret instead of `app-id`. `github.token` cannot push to
