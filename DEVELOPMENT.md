@@ -248,6 +248,9 @@ the file are unknown to it. Rotation relies on that:
    Clients that never re-downloaded the keyring stop verifying at this point.
    apt has no key-update channel, so plan phase 1 long enough.
 
+`make key-to-repo` first prints the fingerprint and uid of every secret key it
+is about to upload, so you can check that a retired key is really gone.
+
 `make backup-key` writes `$(GNUPGHOME)/signing-key.secret.asc` (mode 600). It
 sits inside the keyring directory, so it is private and git-ignored along with
 it. Move it into a vault, then `shred -u` it. To restore, run `gpg --import`

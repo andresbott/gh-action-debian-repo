@@ -48,8 +48,12 @@ grep -q 'type=tag' "$FAKE_LOG" && bad "empty TAGS still added a tag policy" || o
 
 # make key-to-repo pipes the armored private key into the environment secret
 export GNUPGHOME="$tmp/gnupg"; make_test_key "$GNUPGHOME" k@example.org; : > "$FAKE_LOG"
-make --no-print-directory -f "$ROOT/Makefile" -C "$tmp/cwd" key-to-repo REPO=acme/debs GNUPGHOME="$GNUPGHOME" >/dev/null 2>&1 || bad "key-to-repo failed"
+out="$(make --no-print-directory -f "$ROOT/Makefile" -C "$tmp/cwd" key-to-repo REPO=acme/debs GNUPGHOME="$GNUPGHOME" 2>&1)" || bad "key-to-repo failed: $out"
 grep -q '^secret set APT_SIGNING_KEY --repo acme/debs --env github-pages <<< -----BEGIN PGP PRIVATE KEY BLOCK-----' "$FAKE_LOG" \
   && ok "key-to-repo sets APT_SIGNING_KEY in the github-pages environment" || bad "key-to-repo: $(cat "$FAKE_LOG")"
+# before uploading, it names every secret key it is about to upload
+fpr="$(gpg --batch --list-secret-keys --with-colons 2>/dev/null | awk -F: '$1=="fpr"{print $10; exit}')"
+printf '%s\n' "$out" | grep -qF "$fpr  test <k@example.org>" \
+  && ok "key-to-repo lists the fingerprint and uid of each key it uploads" || bad "key-to-repo listing: $out"
 
 [ "$fail" = 0 ] && echo "PASS setup_repo_test" || { echo "FAIL setup_repo_test"; exit 1; }

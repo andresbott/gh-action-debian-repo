@@ -213,6 +213,9 @@ setup-repo: ## enable Pages (GitHub Actions) + the github-pages environment poli
 .PHONY: key-to-repo
 key-to-repo: require-key ## store the private key as the APT_SIGNING_KEY secret: make key-to-repo REPO=owner/name [ENVIRONMENT=github-pages]
 	@[ "$(REPO)" ] || { echo ">> usage: make key-to-repo REPO=owner/name [ENVIRONMENT=github-pages]"; exit 1; }
+	@echo ">> uploading every secret key in $(GNUPGHOME) (fingerprint  uid):"; \
+	 gpg --batch --list-secret-keys --with-colons | awk -F: '$$1=="sec"{p=1; next} p&&$$1=="fpr"{fpr=$$10; p=0; next} \
+	   $$1=="ssb"{fpr=""} $$1=="uid"&&fpr!=""{print "   " fpr "  " $$10}'
 	@gpg --batch --export-secret-keys --armor | $(GH) secret set APT_SIGNING_KEY --repo "$(REPO)" --env "$(or $(ENVIRONMENT),github-pages)"
 	@echo "✅ APT_SIGNING_KEY set on $(REPO) (environment $(or $(ENVIRONMENT),github-pages))"
 
