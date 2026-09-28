@@ -78,9 +78,11 @@ Nothing is kept between runs: every publish rebuilds the whole site from the
 instance.
 
 1. **validate**: the config loads (`dists.conf` names, `site.conf` identity), and
-   every `packages/*.json` validates against the schema. The schema check uses
-   `scripts/jsonschema.sh`, which runs `check-jsonschema`, else `uvx`, else
-   `pipx run`.
+   every `packages/*.json` (from `PKG_DIR`, as hydrate reads them) validates
+   against the schema. The schema check uses `scripts/jsonschema.sh`, which
+   runs `check-jsonschema`, else `uvx`, else `pipx run`. When none of them is
+   available, validate warns and skips the schema check; hydrate still checks
+   every artifact it downloads.
 2. **hydrate** (`scripts/hydrate.sh`):
    1. If `conf/owners.conf` exists, every reference is checked against it
       *before anything is downloaded*. Each URL must be

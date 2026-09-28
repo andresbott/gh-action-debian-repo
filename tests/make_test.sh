@@ -59,6 +59,21 @@ m clean >/dev/null; [ ! -d "$inst/_site" ] && ok "make clean" || bad "make clean
 m preview >/dev/null 2>&1 && grep -q 'Demo preview' "$inst/.cache/preview/index.html" \
   && ok "preview of an empty repo renders the demo" || bad "demo preview"
 
+# validate: package files are read from PKG_DIR, as hydrate reads them; with no
+# schema validator at all (scripts/jsonschema.sh exit 127) it warns and passes
+val="$tmp/val"; mkdir -p "$val/conf" "$val/packages" "$tmp/pk"; cp "$tmp/d.conf" "$val/conf/dists.conf"
+vm(){ make --no-print-directory -f "$ROOT/Makefile" -C "$val" "$@"; }
+cp "$ROOT/tests/fixtures/invalid/bad-release.json" "$tmp/pk/"
+out="$(PKG_DIR="$tmp/pk" vm validate 2>&1)"; rc=$?
+if printf '%s' "$out" | grep -q 'no package files'; then bad "validate ignores PKG_DIR: $out"
+elif "$ROOT/scripts/jsonschema.sh" --version >/dev/null 2>&1 && [ "$rc" = 0 ]; then bad "validate accepted an invalid file in PKG_DIR: $out"
+else ok "validate checks the package files in PKG_DIR"; fi
+cp "$ROOT/tests/fixtures/valid/any-release.json" "$val/packages/"
+nojs="$tmp/nojs"; mkdir -p "$nojs"   # a PATH without check-jsonschema, uvx or pipx
+for c in bash sh make env dirname basename tr grep awk find cat; do ln -s "$(command -v "$c")" "$nojs/$c"; done
+out="$(PATH="$nojs" vm validate 2>&1)" && printf '%s' "$out" | grep -q 'check-jsonschema not found — skipping schema validation' \
+  && ok "validate without a schema validator warns and passes" || bad "validate without a validator: $out"
+
 # the engine checkout builds its bundled example instance
 [ "$(make --no-print-directory -C "$ROOT" help 2>/dev/null | sed -n 2p)" = "instance: $ROOT/example" ] \
   && ok "engine checkout defaults to example/" || bad "engine checkout instance"

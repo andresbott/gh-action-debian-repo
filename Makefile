@@ -64,11 +64,18 @@ default: help
 publish: validate hydrate build ## full local rebuild (mirrors CI): validate -> hydrate -> build
 
 .PHONY: validate
+# The package files are the ones hydrate reads (PKG_DIR, default packages/).
+# No schema validator at all (jsonschema.sh exit 127) warns instead of failing.
 validate: ## check the instance config and packages/*.json against the JSON schema
 	@$(INFO) DISTS >/dev/null && echo "✅ config valid ($$($(INFO) DISTS_CONF))"
-	@files=$$(find "$(INSTANCE)/packages" -name '*.json' 2>/dev/null); \
+	@files=$$(find "$$($(INFO) PKG_DIR)" -name '*.json' 2>/dev/null); \
 	 if [ -z "$$files" ]; then echo "⚠️  no package files to validate"; exit 0; fi; \
-	 $(SCRIPTS)/jsonschema.sh --schemafile "$(ENGINE)/schema/package.schema.json" $$files && echo "✅ all package files valid"
+	 rc=0; out=$$($(SCRIPTS)/jsonschema.sh --schemafile "$(ENGINE)/schema/package.schema.json" $$files 2>&1) || rc=$$?; \
+	 case $$rc in \
+	   0)   echo "✅ all package files valid";; \
+	   127) echo "⚠️  check-jsonschema not found — skipping schema validation";; \
+	   *)   printf '%s\n' "$$out" >&2; echo "❌ package files failed schema validation" >&2; exit 1;; \
+	 esac
 
 .PHONY: hydrate
 hydrate: ## assemble $(SITE)/pool from packages/*.json (download + verify) and debs/
