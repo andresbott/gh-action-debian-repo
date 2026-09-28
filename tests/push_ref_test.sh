@@ -142,6 +142,18 @@ out="$("$ROOT/scripts/push-ref.sh" --remote "file://$tmp/locked.git" --branch ma
   || { printf '%s' "$out" | grep -q 'protected branch hook declined' && ! printf '%s' "$out" | grep -q retrying \
        && ok "non-race push failure: git's error, no retries" || bad "refused push output: $out"; }
 
+# a remote that cannot be read (bad token, missing repository, network) is not a
+# missing branch: git's own error, and never an orphan branch pushed in its place
+nowhere="file://$tmp/nowhere.git"
+out="$("$ROOT/scripts/push-ref.sh" --remote "$nowhere" --branch main --name myapp --dist-dir "$dist" \
+        --repo acme/myapp --tag v1.0 2>&1)" && bad "unreachable remote accepted" \
+  || { printf '%s' "$out" | grep -q 'does not appear to be a git repository' && printf '%s' "$out" | grep -qF "cannot reach $nowhere" \
+       && ! printf '%s' "$out" | grep -q 'not found' && ok "unreachable remote: git's error, not 'branch not found'" || bad "unreachable remote output: $out"; }
+out="$("$ROOT/scripts/push-ref.sh" --remote "$nowhere" --branch apt --name myapp --dist-dir "$dist" \
+        --repo acme/myapp --tag v1.0 --create-branch 2>&1)" && bad "unreachable remote accepted with --create-branch" \
+  || { printf '%s' "$out" | grep -qF "cannot reach $nowhere" && ! printf '%s' "$out" | grep -q 'creating it' \
+       && ok "--create-branch: an unreachable remote fails instead of creating an orphan" || bad "unreachable remote + --create-branch: $out"; }
+
 # --verify-assets: a reference is only pushed when its release assets are public
 # and match (a fake curl serves $FAKE_ASSETS/<file> for any release URL)
 mkdir -p "$tmp/bin" "$tmp/assets"

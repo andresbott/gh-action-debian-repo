@@ -56,7 +56,16 @@ tmpd="$(mktemp -d)"; trap 'rm -rf "$tmpd"' EXIT
 work="$tmpd/target"   # the clone; the dists.conf overlay sits next to it, outside the tree
 g(){ GIT_AUTHOR_NAME="$AUTHOR_NAME" GIT_AUTHOR_EMAIL="$AUTHOR_EMAIL" \
      GIT_COMMITTER_NAME="$AUTHOR_NAME" GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" git -C "$work" "$@"; }
-branch_exists(){ git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" >/dev/null 2>&1; }
+# 0 = the branch exists, 1 = it does not (ls-remote --exit-code says 2). Any other
+# failure — credentials, a missing repository, the network — stops here with
+# git's message: it must never pass for "no branch" (and, in self mode, for a
+# licence to create an orphan branch without the target's checks).
+branch_exists(){
+  local rc=0 err
+  err="$(git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" 2>&1 >/dev/null)" || rc=$?
+  case "$rc" in 0) return 0;; 2) return 1;; esac
+  printf '%s\n' "$err" >&2; echo "❌ cannot reach $REMOTE" >&2; exit 1
+}
 
 if branch_exists; then
   git clone --quiet --no-tags --single-branch --branch "$BRANCH" "$REMOTE" "$work"

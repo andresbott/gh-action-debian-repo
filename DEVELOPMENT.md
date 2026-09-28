@@ -162,7 +162,9 @@ In collection mode the build inputs (`dists`, `aliases`, `arches`, `repo-name`,
 2. Downloads the artifact.
 3. Mints an App token when `app-id` is set.
 4. Runs `actions/register` → `scripts/push-ref.sh`, which:
-   1. Clones the target branch, creating it as an orphan in self mode.
+   1. Clones the target branch, creating it as an orphan in self mode. Only a
+      branch the remote reports missing is created: a remote that cannot be
+      read (credentials, a missing repository) fails with git's message.
    2. Writes the reference with `register.sh`.
    3. Checks it against the **target's** config: releases and arches in its
       `dists.conf`, its `owners.conf`, and collisions with its other references
