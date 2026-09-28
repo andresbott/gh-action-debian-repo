@@ -98,7 +98,15 @@ shows the install commands.
 - `conf/owners.conf`
 - `packages/`
 
-Copy [`example/`](example/) as a starting point. It publishes on every push:
+To start one, copy [`example/conf/dists.conf`](example/conf/dists.conf) and
+[`example/.gitignore`](example/.gitignore) into it. Write your own
+`conf/site.conf`: every key is optional, and usually `SITE_TITLE` is all you
+need. Do **not** copy example's `site.conf`. Its `REPO_NAME`, `REPO_URL` and
+`GITHUB_URL` belong to the local demo (`http://localhost:8000`), and a committed
+`REPO_URL` beats the Pages URL. Left unset, they are derived from the repository
+and its Pages URL.
+
+The collection publishes on every push:
 
 ```yaml
 # acme/apt: .github/workflows/publish.yml
