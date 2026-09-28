@@ -6,11 +6,12 @@ unset GITHUB_REPOSITORY
 need(){ for c in "$@"; do command -v "$c" >/dev/null 2>&1 || { echo "⚠️  skipping: missing '$c'"; exit 0; }; done; }
 
 # make_deb <outdir> <name> <version> <arch> [tag] -> prints built .deb path
+# DEB_CONTROL_EXTRA (optional): extra control lines, e.g. 'Homepage: https://x.example/'
 make_deb(){
   local outdir="$1" name="$2" ver="$3" arch="$4" tag="${5:-x}" root
   root="$(mktemp -d)"; mkdir -p "$root/DEBIAN" "$root/usr/bin"
-  printf 'Package: %s\nVersion: %s\nArchitecture: %s\nMaintainer: t <t@e>\nDescription: test %s (%s)\n' \
-    "$name" "$ver" "$arch" "$name" "$tag" > "$root/DEBIAN/control"
+  printf 'Package: %s\nVersion: %s\nArchitecture: %s\nMaintainer: t <t@e>\n%sDescription: test %s (%s)\n' \
+    "$name" "$ver" "$arch" "${DEB_CONTROL_EXTRA:+$DEB_CONTROL_EXTRA$'\n'}" "$name" "$tag" > "$root/DEBIAN/control"
   printf '#!/bin/sh\necho %s %s\n' "$name" "$tag" > "$root/usr/bin/$name"; chmod +x "$root/usr/bin/$name"
   # arch must be the trailing filename component: apt-ftparchive's --arch
   # (used by gen-index.sh) accepts only *_<arch>.deb / *_all.deb by filename,

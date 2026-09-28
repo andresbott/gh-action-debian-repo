@@ -130,6 +130,25 @@ got=$(printf '%s' "$myapp_row" | grep -o 'class="rel">[a-z]*' | awk -F'>' '{prin
 got=$(printf '%s' "$myapp_row" | grep -o 'class="rel-h">[a-z]*' | awk -F'>' '{print $2}' | tr '\n' ' ')
 [ "$got" = "trixie forky sid " ] || { echo "❌ download groups must follow DISTS order, got: $got"; fail=1; }
 
+# Package fields come from whoever built the .deb: a Homepage must neither break
+# out of its href="..." attribute nor link anything but http(s)
+xss_site="$tmp/_xss"; xss_debs="$tmp/xss_debs"
+DEB_CONTROL_EXTRA='Homepage: https://x.example/" onmouseover="alert(1)' make_deb "$xss_debs" quoted 1.0 amd64 q >/dev/null
+DEB_CONTROL_EXTRA='Homepage: javascript:alert(1)' make_deb "$xss_debs" scripted 1.0 amd64 s >/dev/null
+DEB_CONTROL_EXTRA='Homepage: https://good.example/app/' make_deb "$xss_debs" linked 1.0 amd64 l >/dev/null
+DISTS_CONF="$conf" "$ROOT/scripts/hydrate.sh" "$xss_site" "$xss_debs" >/dev/null
+DISTS_CONF="$conf" "$ROOT/scripts/gen-index.sh" "$xss_site" >/dev/null
+DISTS_CONF="$conf" "$ROOT/scripts/render-index.sh" "$xss_site"
+quoted_row=$(grep '<code>quoted</code>' "$xss_site/index.html")
+printf '%s' "$quoted_row" | grep -q '" onmouseover="' && { echo "❌ a '\"' in Homepage breaks out of the href attribute"; fail=1; }
+printf '%s' "$quoted_row" | grep -qF 'href="https://x.example/&quot; onmouseover=&quot;alert(1)"' \
+  || { echo "❌ Homepage with '\"' must stay one escaped href, got: $quoted_row"; fail=1; }
+scripted_row=$(grep '<code>scripted</code>' "$xss_site/index.html")
+printf '%s' "$scripted_row" | grep -q 'class="home"' && { echo "❌ a javascript: Homepage must not become a link"; fail=1; }
+grep -qi 'href="javascript:' "$xss_site/index.html" && { echo "❌ javascript: href on the page"; fail=1; }
+grep '<code>linked</code>' "$xss_site/index.html" | grep -qF '<a class="home" href="https://good.example/app/">good.example/app</a>' \
+  || { echo "❌ an https Homepage must still be linked"; fail=1; }
+
 # A genuinely empty repo has nothing installable in any release, so NO suite is
 # selectable — neither codenames nor the aliases pointing at them — and a short
 # note stands in for the picker.

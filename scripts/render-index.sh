@@ -69,7 +69,8 @@ if [ -n "$tsv" ]; then
     # $DISTS codename — the tsv above is built by walking $DISTS — so every name
     # has a position here.
     BEGIN{ nd=split(dists,dord," "); for(di=1;di<=nd;di++) dpos[dord[di]]=di }
-    function esc(s){ gsub(/&/,"\\&amp;",s); gsub(/</,"\\&lt;",s); gsub(/>/,"\\&gt;",s); return s }
+    # text and double-quoted attribute values alike: every field comes from a .deb
+    function esc(s){ gsub(/&/,"\\&amp;",s); gsub(/</,"\\&lt;",s); gsub(/>/,"\\&gt;",s); gsub(/"/,"\\&quot;",s); return s }
     function hsize(b){ if(b+0>=1048576)return sprintf("%.1f MB",b/1048576);
                        else if(b+0>=1024)return sprintf("%.0f KB",b/1024); else return b" B" }
     function srt(a,c,   i,j,t){ for(i=1;i<c;i++)for(j=i+1;j<=c;j++)if(a[j]<a[i]){t=a[i];a[i]=a[j];a[j]=t} }
@@ -135,7 +136,8 @@ if [ -n "$tsv" ]; then
             if(rak in afn){ dl=dl dllink(rak, av[a]); break } }
           dl=dl "</div>";
         }
-        home=""; if(khome[key]!=""){ lbl=khome[key]; sub(/^https?:\/\//,"",lbl); sub(/\/+$/,"",lbl);
+        # only a web link becomes a link: never javascript:, data: or the like
+        home=""; if(khome[key] ~ /^https?:\/\//){ lbl=khome[key]; sub(/^https?:\/\//,"",lbl); sub(/\/+$/,"",lbl);
           home="<a class=\"home\" href=\"" esc(khome[key]) "\">" esc(lbl) "</a>" }
         printf "            <details class=\"pkg\" name=\"packages\"><summary><span class=\"name\"><code>%s</code></span><span class=\"ver\">%s</span>%s<span class=\"rels\">%s</span><span class=\"arches\">%s</span></summary><div class=\"pkg-body\"><p class=\"desc\">%s</p>%s%s</div></details>\n", esc(kpkg[key]), esc(kver[key]), vermulti, reltags, tags, esc(kdesc[key]), home, dl
       }

@@ -251,8 +251,9 @@ into `GNUPGHOME`, then `make key-to-repo`.
   the `publish` job. Collection clients never see it.
 - **Workflow inputs are data.** `conf-overlay.sh` writes them `%q`-quoted, and
   `dists.conf` names are validated.
-- **The landing page** escapes every value from `site.conf` (`&`, `<`, `>`,
-  `"`).
+- **The landing page** escapes every value from `site.conf` and every package
+  field (`&`, `<`, `>`, `"`). A package's `Homepage` is linked only when it is
+  an `http(s)://` URL.
 - **In a collection**, `owners.conf` limits each package to its listed
   repositories and their release URLs. The register step rejects a reference the
   target would reject. The build re-checks everything anyway, so a hand-edited
