@@ -164,7 +164,7 @@ collection:
 
 - its releases and architectures
 - `owners.conf`
-- no other file already providing the same (package, release, arch)
+- no other reference, and no `.deb` committed in its `debs/`, already providing the same (package, release, arch)
 - every release asset is publicly downloadable and matches its sha256
 
 One bad client therefore cannot break the next publish for everyone.

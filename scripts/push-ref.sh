@@ -4,9 +4,10 @@
 # collection repository. Runs scripts/register.sh inside a fresh clone, checks
 # the reference against the TARGET's config before committing — its releases
 # and arches (dists.conf), its owners.conf, and no (package, release, arch)
-# already claimed by another reference file — so one client cannot break a
-# shared repository's next publish. Then commits and pushes, rebasing onto
-# concurrent pushes (other apps publishing at the same time) and retrying.
+# already claimed by another reference file or a committed debs/ .deb — so an
+# honest mistake cannot break a shared repository's next publish. Then commits
+# and pushes, rebasing onto concurrent pushes (other apps publishing at the same
+# time) and retrying.
 #
 # Usage: push-ref.sh --remote <git-url> --branch <branch> --name <pkg>
 #          --dist-dir <dir> --repo <owner/app> --tag <tag>
@@ -86,11 +87,23 @@ owners_check_ref "$ref"
 claims(){ # <ref.json> -> "<package> <codename> <arch>" per pooled artifact
   jq -r '.name as $n | .artifacts[] | "\($n) \(.release) \(.arch)"' "$1" \
     | while read -r n r a; do for cn in $(release_targets "$r"); do echo "$n $cn $a"; done; done; }
+deb_claims(){ # <deb> <release> -> "<package> <codename> <arch>", as hydrate pools a committed deb
+  local p a cn
+  p="$(dpkg-deb -f "$1" Package 2>/dev/null)" && a="$(dpkg-deb -f "$1" Architecture 2>/dev/null)" || return 0
+  # a release dir the target does not publish fails the target's own build, not this check
+  for cn in $(release_targets "$2" 2>/dev/null); do echo "$p $cn $a"; done; }
+mine="$(claims "$ref" | sort -u)"
 shopt -s nullglob
 for other in "$PKG_DIR"/*.json; do
   [ "$other" = "$ref" ] && continue
-  dup="$(comm -12 <(claims "$ref" | sort -u) <(claims "$other" | sort -u) | head -1)"
+  dup="$(comm -12 <(printf '%s\n' "$mine") <(claims "$other" | sort -u) | head -1)"
   [ -z "$dup" ] || { echo "❌ ($dup) is already provided by ${other#"$work"/} — one file per (package, release, arch)" >&2; exit 1; }
+done
+# the target's committed debs/ count too: bare debs/*.deb = any, debs/<codename>/*.deb
+for deb in "$DEBS_DIR"/*.deb "$DEBS_DIR"/*/*.deb; do
+  rel=any; [ "$(dirname "$deb")" = "$DEBS_DIR" ] || rel="$(basename "$(dirname "$deb")")"
+  dup="$(comm -12 <(printf '%s\n' "$mine") <(deb_claims "$deb" "$rel" | sort -u) | head -1)"
+  [ -z "$dup" ] || { echo "❌ ($dup) is already provided by ${deb#"$work"/} — one source per (package, release, arch) across packages/ and debs/" >&2; exit 1; }
 done
 if [ "$VERIFY" = 1 ]; then
   while read -r url want; do

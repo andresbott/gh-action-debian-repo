@@ -165,7 +165,8 @@ In collection mode the build inputs (`dists`, `aliases`, `arches`, `repo-name`,
    1. Clones the target branch, creating it as an orphan in self mode.
    2. Writes the reference with `register.sh`.
    3. Checks it against the **target's** config: releases and arches in its
-      `dists.conf`, its `owners.conf`, and collisions with its other references.
+      `dists.conf`, its `owners.conf`, and collisions with its other references
+      and its committed `debs/`.
       In self mode the `dists`/`aliases`/`arches` inputs are layered over that
       `dists.conf` first by `scripts/dists-overlay.sh`, which the publish uses
       too: a fresh `apt` branch has no `conf/` of its own. `aliases: none`

@@ -52,6 +52,24 @@ for f in ../x.json packages/../x.json packages/sub/x.json packages/x.txt /etc/x.
 done
 [ "$(commits)" = "$n" ] && ok "rejections leave the collection untouched" || bad "a rejected push committed"
 
+# the collection's committed debs/ claim (package, release, arch) too, as hydrate counts them
+git clone --quiet "$tmp/collection.git" "$tmp/withdebs"
+make_deb "$tmp/withdebs/debs" tool 1.0 amd64 flat >/dev/null            # bare = any
+make_deb "$tmp/withdebs/debs/trixie" gadget 1.0 amd64 tx >/dev/null
+git -C "$tmp/withdebs" add -A && git -C "$tmp/withdebs" commit --quiet -m debs && git -C "$tmp/withdebs" push --quiet origin main
+n=$(commits)
+make_deb "$tmp/gadget" gadget 2.0 amd64 g >/dev/null                   # any -> bookworm + trixie
+out="$("$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name gadget --dist-dir "$tmp/gadget" \
+  --repo acme/gadget --tag v2 2>&1)" && bad "reference colliding with debs/<release>/ accepted" \
+  || { printf '%s' "$out" | grep -q '(gadget trixie amd64) is already provided by debs/trixie/gadget_1.0_tx_amd64.deb' \
+       && ok "collision with a committed debs/<release>/*.deb rejected" || bad "debs/<release> collision message: $out"; }
+make_deb "$tmp/tool/bookworm" tool 2.0 amd64 t >/dev/null
+out="$("$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name tool --dist-dir "$tmp/tool" \
+  --repo acme/tool --tag v2 2>&1)" && bad "reference colliding with a bare debs/*.deb accepted" \
+  || { printf '%s' "$out" | grep -q '(tool bookworm amd64) is already provided by debs/tool_1.0_flat_amd64.deb' \
+       && ok "collision with a committed debs/*.deb (any) rejected" || bad "debs/ collision message: $out"; }
+[ "$(commits)" = "$n" ] || bad "a debs/ collision committed"
+
 # owners.conf in the collection: only listed packages from their own repos
 git clone --quiet "$tmp/collection.git" "$tmp/own"
 printf 'myapp acme/myapp\nother acme/other\n' > "$tmp/own/conf/owners.conf"
