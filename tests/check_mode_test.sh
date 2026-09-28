@@ -40,6 +40,18 @@ rejects "not a valid branch name" "invalid self-branch" IN_NAME=myapp IN_ARTIFAC
 rejects "must be packages/" "file outside packages/" IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_FILE=../x.json
 rejects "no effect in collection mode" "build inputs in collection mode" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_COLLECTION=acme/apt HAS_COLLECTION_TOKEN=true IN_DISTS=trixie IN_THEME=teal
+# instance-ref/instance-path pick the instance a publish-only run builds; with a
+# name the instance is the self-branch or the collection, so they would be ignored
+rejects "input 'instance-ref' only applies to publish-only" "instance-ref in self mode" \
+   IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_INSTANCE_REF=main
+rejects "input 'instance-path' only applies to publish-only" "instance-path in self mode" \
+   IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_INSTANCE_PATH=sub
+rejects "input 'instance-ref' only applies to publish-only" "instance-ref in collection mode" \
+   IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_COLLECTION=acme/apt HAS_COLLECTION_TOKEN=true IN_INSTANCE_REF=main
+is "0 mode=self tag=v1 branch=apt target=acme/myapp target-owner=acme target-name=myapp " "instance-path '.' (the default) allowed with name" \
+   IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_INSTANCE_PATH=.
+is "0 mode=publish-only tag= branch= target= target-owner= target-name= " "instance-ref/instance-path allowed in publish-only" \
+   IN_INSTANCE_REF=apt IN_INSTANCE_PATH=sub
 cm IN_NAME=MyApp IN_COLLECTION=x >/dev/null; [ "$(grep -c '❌' "$tmp/log")" -ge 3 ] && ok "all problems reported at once" || bad "errors: $(cat "$tmp/log")"
 [ ! -s "$tmp/out" ] && ok "no outputs on rejection" || bad "outputs written on rejection"
 cm GITHUB_ACTIONS=true IN_COLLECTION=acme/apt >/dev/null; grep -q '^::error title=debian-repo::' "$tmp/log" && ok "annotations in Actions" || bad "no ::error annotation"

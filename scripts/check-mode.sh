@@ -9,6 +9,7 @@
 #                 (the collection repo itself, or a re-publish)
 # Env (from the workflow): IN_NAME IN_ARTIFACT IN_TAG IN_FILE IN_COLLECTION
 #   IN_COLLECTION_BRANCH IN_SELF_BRANCH IN_APP_ID HAS_APP_KEY HAS_COLLECTION_TOKEN
+#   IN_INSTANCE_REF IN_INSTANCE_PATH (publish-only; rejected with a name)
 #   IN_DISTS IN_ALIASES IN_ARCHES IN_REPO_NAME IN_SITE_TITLE IN_SITE_TAGLINE IN_THEME
 #   (the build inputs; rejected in collection mode, where they would be ignored)
 #   REF_TYPE REF_NAME (github.ref_type / github.ref_name) GITHUB_REPOSITORY
@@ -37,6 +38,10 @@ else
   fi
   [ -z "$(v IN_FILE)" ] || printf '%s' "$(v IN_FILE)" | grep -qE '^packages/[A-Za-z0-9][A-Za-z0-9._+-]*\.json$' \
     || err "file '$(v IN_FILE)' must be packages/<name>.json"
+  # with a name the publish builds the self-branch (or the collection builds
+  # itself): an instance-ref/instance-path given here would be silently ignored
+  [ -z "$(v IN_INSTANCE_REF)" ] || err "input 'instance-ref' only applies to publish-only (without 'name')"
+  case "$(v IN_INSTANCE_PATH)" in ""|.) ;; *) err "input 'instance-path' only applies to publish-only (without 'name')";; esac
 fi
 
 branch=""; target=""

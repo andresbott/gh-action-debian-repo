@@ -54,11 +54,11 @@ on:
         type: string
         default: apt
       instance-ref:
-        description: Publish-only — the ref holding the instance. Default = the ref this run is for.
+        description: Publish-only — the ref holding the instance. Default = the ref this run is for. Rejected with name.
         type: string
         default: ''
       instance-path:
-        description: Directory of the instance inside that ref.
+        description: Publish-only — directory of the instance inside that ref. Rejected with name.
         type: string
         default: .
       dists:
@@ -138,6 +138,8 @@ jobs:
           IN_COLLECTION_BRANCH: ${{ inputs.collection-branch }}
           IN_SELF_BRANCH: ${{ inputs.self-branch }}
           IN_APP_ID: ${{ inputs.app-id }}
+          IN_INSTANCE_REF: ${{ inputs.instance-ref }}
+          IN_INSTANCE_PATH: ${{ inputs.instance-path }}
           IN_DISTS: ${{ inputs.dists }}
           IN_ALIASES: ${{ inputs.aliases }}
           IN_ARCHES: ${{ inputs.arches }}

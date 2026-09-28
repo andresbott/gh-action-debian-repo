@@ -156,7 +156,9 @@ problem at once as annotations, and picks the mode:
 
 In collection mode the build inputs (`dists`, `aliases`, `arches`, `repo-name`,
 `site-title`, `site-tagline`, `theme`) are rejected: the collection's own
-`conf/` decides them, so they would be silently ignored.
+`conf/` decides them, so they would be silently ignored. For the same reason
+`instance-ref` and `instance-path` are rejected whenever `name` is set: they
+only pick the instance a publish-only run builds.
 
 **`register`**:
 
