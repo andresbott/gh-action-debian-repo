@@ -57,7 +57,7 @@ if [ ${#json_files[@]} -eq 0 ]; then echo "⚠️  no package files in $PKG_DIR"
       url=$(jq -r ".artifacts[$i].url" "$f");   want=$(jq -r ".artifacts[$i].sha256" "$f")
       arch_valid "$arch" || { echo "❌ $f: arch '$arch' not in ARCHES" >&2; exit 1; }
       targets=$(release_targets "$release") || exit 1
-      tmp=$(mktemp --suffix .deb); curl -fsSL "$url" -o "$tmp"
+      tmp=$(mktemp --suffix .deb); curl -fsSL --retry 3 --retry-all-errors "$url" -o "$tmp"
       got=$(sha256sum "$tmp" | cut -d' ' -f1)
       [ "$got" = "$want" ] || { echo "❌ $name/$arch: sha256 mismatch (want $want, got $got)" >&2; rm -f "$tmp"; exit 1; }
       p=$(dpkg-deb -f "$tmp" Package); v=$(dpkg-deb -f "$tmp" Version); a=$(dpkg-deb -f "$tmp" Architecture)

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -uo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"; . "$ROOT/tests/helpers.sh"
-need dpkg-deb
+need dpkg-deb curl jq
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 make_instance "$tmp/instance"
 conf="$tmp/dists.conf"; printf 'DISTS="bookworm trixie"\nALIASES="stable:bookworm"\nARCHES="amd64 arm64"\n' > "$conf"
@@ -56,5 +56,17 @@ if DISTS_CONF="$conf" "$ROOT/scripts/hydrate.sh" "$site4" "$debs4" >/dev/null 2>
 else
   echo "❌ hydrate must accept one package at a different version per release"; fail=1
 fi
+
+# a referenced .deb is downloaded with retries (a transient release-asset error
+# must not fail the whole publish); a curl that logs its arguments serves file://
+site5="$tmp/_site5"; pk5="$tmp/pk5"; mkdir -p "$pk5" "$tmp/bin"
+d5="$(make_deb "$tmp/assets5" remote 1.0 amd64 r)"
+jq -n --arg url "file://$d5" --arg sha "$(sha256sum "$d5" | cut -d' ' -f1)" \
+  '{name:"remote", version:"1.0", artifacts:[{release:"trixie", arch:"amd64", url:$url, sha256:$sha}]}' > "$pk5/remote.json"
+printf '#!/bin/sh\nprintf "%%s\\n" "$*" >> "%s"\nexec %s "$@"\n' "$tmp/curl.log" "$(command -v curl)" > "$tmp/bin/curl"; chmod +x "$tmp/bin/curl"
+if PATH="$tmp/bin:$PATH" PKG_DIR="$pk5" DISTS_CONF="$conf" "$ROOT/scripts/hydrate.sh" "$site5" "$tmp/nodebs" >/dev/null 2>&1 \
+   && [ -f "$site5/pool/trixie/main/r/remote/remote_1.0_amd64.deb" ] && grep -q -- '--retry 3 --retry-all-errors' "$tmp/curl.log"; then
+  echo "✅ referenced .debs are downloaded with retries"
+else echo "❌ download retries: $(cat "$tmp/curl.log" 2>/dev/null)"; fail=1; fi
 
 [ "$fail" = 0 ] && echo "PASS hydrate_test" || { echo "FAIL hydrate_test"; exit 1; }
