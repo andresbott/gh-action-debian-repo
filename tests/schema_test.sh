@@ -10,7 +10,7 @@ SCHEMA="$ROOT/schema/package.schema.json"
 # check-jsonschema, else uvx check-jsonschema (see scripts/jsonschema.sh)
 cjs(){ "$ROOT/scripts/jsonschema.sh" "$@"; }
 cjs --version >/dev/null 2>&1 || {
-  echo "❌ check-jsonschema not found (pip install check-jsonschema, or install uv)"; exit 1; }
+  echo "❌ check-jsonschema not found (pip install check-jsonschema, or install uv)"; echo "FAIL schema_test"; exit 1; }
 
 fail=0
 shopt -s nullglob
@@ -33,7 +33,8 @@ done
 
 if [ "$fail" -eq 0 ]; then
   echo "✅ all schema tests passed"
+  echo "PASS schema_test"
 else
   echo "❌ schema tests failed"
+  echo "FAIL schema_test"; exit 1
 fi
-exit "$fail"

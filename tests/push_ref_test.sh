@@ -38,11 +38,13 @@ n=$(commits); out="$(push 2>&1)"
 # rejected BEFORE anything is committed: the collection is left untouched
 n=$(commits)
 make_deb "$tmp/badrel/forky" myapp 1.0 amd64 f >/dev/null
-"$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name myapp --dist-dir "$tmp/badrel" \
-  --repo acme/myapp --tag v1.0 >/dev/null 2>&1 && bad "release unknown to the target accepted" || ok "release unknown to the target rejected"
+out="$("$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name myapp --dist-dir "$tmp/badrel" \
+  --repo acme/myapp --tag v1.0 2>&1)" && bad "release unknown to the target accepted" \
+  || { printf '%s' "$out" | grep -q "unknown release 'forky'" && ok "release unknown to the target rejected" || bad "unknown release message: $out"; }
 make_deb "$tmp/badarch" myapp 1.0 arm64 r >/dev/null
-"$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name myapp --dist-dir "$tmp/badarch" \
-  --repo acme/myapp --tag v1.0 >/dev/null 2>&1 && bad "arch unknown to the target accepted" || ok "arch unknown to the target rejected"
+out="$("$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name myapp --dist-dir "$tmp/badarch" \
+  --repo acme/myapp --tag v1.0 2>&1)" && bad "arch unknown to the target accepted" \
+  || { printf '%s' "$out" | grep -q "arch 'arm64' is not published by the target" && ok "arch unknown to the target rejected" || bad "unknown arch message: $out"; }
 make_deb "$tmp/dup" other 2.0 amd64 d >/dev/null
 out="$("$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name other --dist-dir "$tmp/dup" \
   --repo acme/other --tag v2 --file packages/other.v2.json 2>&1)" && bad "colliding (package, release, arch) accepted" \

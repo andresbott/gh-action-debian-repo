@@ -92,7 +92,9 @@ reg repository=acme/apt branch=main file=packages/myapp.v1.json >/dev/null 2>&1;
 make_deb "$tmp/bkw/bookworm" bkwapp 1.0 arm64 b >/dev/null
 bkw(){ step register "Register and push" name=bkwapp dist-dir="$tmp/bkw" source-repository=acme/bkwapp tag=v1 \
          token="$token" verify-assets=false repository=acme/apt branch=main "$@"; }
-bkw >/dev/null 2>&1 && bad "bookworm/arm64 accepted without the inputs" || ok "the target's dists.conf applies without the inputs"
+bkw >/dev/null 2>&1 && bad "bookworm/arm64 accepted without the inputs" \
+  || { grep -q "unknown release 'bookworm'" "$tmp/step.log" && ok "the target's dists.conf applies without the inputs" \
+       || bad "without the inputs: $(tail -3 "$tmp/step.log")"; }
 bkw aliases=stable >/dev/null 2>&1; grep -q 'malformed ALIASES' "$tmp/step.log" \
   && ok "aliases input reaches push-ref" || bad "aliases: $(tail -3 "$tmp/step.log")"
 bkw dists="bookworm trixie" aliases=stable:trixie arches="amd64 arm64" >/dev/null 2>&1 \

@@ -274,7 +274,7 @@ into `GNUPGHOME`, then `make key-to-repo`.
 
 ## Tests
 
-`make test` runs every `tests/*_test.sh` and takes about 30 seconds.
+`make test` runs every `tests/*_test.sh` and takes about a minute.
 
 - **Needs**: `bash`, `make`, `git`, `gpg`/`gpgv`, `dpkg-deb`, `apt-ftparchive`
   (`apt-utils`), `apt-get`, `jq`, `python3` with `yaml`, and `check-jsonschema`,
