@@ -38,11 +38,17 @@ for d in "$DIST_DIR"/*.deb;  do rels+=("any"); debs+=("$d"); done          # bar
 for sub in "$DIST_DIR"/*/;   do [ -d "$sub" ] || continue; r=$(basename "$sub")
   for d in "$sub"*.deb; do rels+=("$r"); debs+=("$d"); done; done
 [ ${#debs[@]} -gt 0 ] || { echo "❌ no .deb files in '$DIST_DIR' (flat or dist/<release>/)" >&2; exit 1; }
-# the asset URL is <release download>/<file name>: a release's assets are one flat
-# namespace, so the same file name under two release dirs would be one URL
-dupname=$(for d in "${debs[@]}"; do basename "$d"; done | sort | uniq -d | head -1)
+# GitHub stores an uploaded asset under a sanitised name: '~' becomes '.', so
+# myapp_6.7.2-1~resolute_amd64.deb is served as myapp_6.7.2-1.resolute_amd64.deb.
+# The URL is built from that stored name, or it would never download.
+asset_name(){ local n; n="$(basename "$1")"; printf '%s\n' "${n//'~'/.}"; }
+# the asset URL is <release download>/<stored name>: a release's assets are one
+# flat namespace, so two files stored under one name (a~b.deb, a.b.deb) in two
+# release dirs would be one URL
+dupname=$(for d in "${debs[@]}"; do asset_name "$d"; done | sort | uniq -d | head -1)
 [ -z "$dupname" ] || { echo "❌ '$dupname' appears in several release dirs — each .deb needs its own" >&2
-  echo "   release asset name (same release asset name = same URL), e.g. a ~<release> version suffix" >&2; exit 1; }
+  echo "   release asset name (same release asset name = same URL; GitHub stores '~' as '.')," >&2
+  echo "   e.g. a ~<release> version suffix" >&2; exit 1; }
 
 # Every .deb must belong to this package and carry the same Version: one package
 # file describes exactly one version (the schema has a single `version`, and
@@ -70,7 +76,7 @@ done
 artifacts=$(for idx in "${!debs[@]}"; do
   d="${debs[$idx]}"; r="${rels[$idx]}"
   jq -n --arg release "$r" --arg arch "$(dpkg-deb -f "$d" Architecture)" \
-        --arg url "$base/$(basename "$d")" --arg sha "$(sha256sum "$d" | cut -d' ' -f1)" \
+        --arg url "$base/$(asset_name "$d")" --arg sha "$(sha256sum "$d" | cut -d' ' -f1)" \
         '{release:$release, arch:$arch, url:$url, sha256:$sha}'
 done | jq -s 'sort_by(.release, .arch)')
 

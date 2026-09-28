@@ -174,7 +174,8 @@ vpush(){ PATH="$tmp/bin:$PATH" FAKE_ASSETS="$tmp/assets" "$ROOT/scripts/push-ref
            --name myapp --dist-dir "$tmp/v3" --repo acme/myapp --tag v3 --verify-assets; }
 n=$(commits)
 out="$(vpush 2>&1)" && bad "missing release asset accepted" \
-  || { printf '%s' "$out" | grep -q 'not downloadable' && ok "--verify-assets: asset not uploaded -> rejected" || bad "missing asset message: $out"; }
+  || { printf '%s' "$out" | grep -q 'not downloadable' && printf '%s' "$out" | grep -q 'GitHub renames special characters' \
+       && ok "--verify-assets: asset not uploaded -> rejected (with the renaming hint)" || bad "missing asset message: $out"; }
 make_deb "$tmp/assets" myapp 3.0 amd64 other >/dev/null; mv "$tmp/assets"/*.deb "$tmp/assets/$(basename "$tmp"/v3/*.deb)"
 out="$(vpush 2>&1)" && bad "mismatching release asset accepted" \
   || { printf '%s' "$out" | grep -q 'sha256 mismatch' && ok "--verify-assets: different asset -> rejected" || bad "mismatch message: $out"; }

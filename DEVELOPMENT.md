@@ -121,7 +121,10 @@ with `dist/trixie/`. All files are merged at publish time. The only rule is one
 (package, release, arch) across every file and `debs/`. Release assets share one
 flat namespace per tag, so each `.deb` needs a distinct file name.
 `register.sh` rejects duplicates. A `~<codename>` version suffix gives you that
-naturally.
+naturally. GitHub stores `~` in an asset name as `.`:
+`myapp_6.7.2-1~trixie_amd64.deb` is served as `myapp_6.7.2-1.trixie_amd64.deb`.
+`register.sh` builds each URL from that stored name, and checks for duplicates
+on it too (`a~b.deb` and `a.b.deb` are one asset).
 
 ### The reference format
 

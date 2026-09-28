@@ -65,4 +65,22 @@ else
     || { echo "❌ duplicate-name failure should say so, got: $err"; fail=1; }
 fi
 
+# GitHub stores an uploaded asset under a sanitised name: '~' becomes '.', so
+# x_1.0~trixie_amd64.deb downloads as x_1.0.trixie_amd64.deb. The URL must use
+# the stored name, and two files that GitHub would store alike are a duplicate.
+dist5="$tmp/dist5"; mkdir -p "$dist5/trixie"
+mv "$(make_deb "$tmp/b5" xapp '1.0~trixie' amd64 t)" "$dist5/trixie/x_1.0~trixie_amd64.deb"
+"$ROOT/scripts/register.sh" --name xapp --dist-dir "$dist5" --repo example-org/x --tag v1.0 --out "$tmp/x.json" >/dev/null 2>&1 \
+  && [ "$(jq -r '.artifacts[0].url' "$tmp/x.json")" = "https://github.com/example-org/x/releases/download/v1.0/x_1.0.trixie_amd64.deb" ] \
+  && echo "✅ '~' in a file name becomes '.' in the asset URL" || { echo "❌ asset URL: $(jq -r '.artifacts[0].url' "$tmp/x.json" 2>/dev/null)"; fail=1; }
+dist6="$tmp/dist6"; mkdir -p "$dist6/trixie" "$dist6/bookworm"
+mv "$(make_deb "$tmp/b6" app 1.0 amd64 t)" "$dist6/trixie/a~b.deb"
+mv "$(make_deb "$tmp/b6" app 1.0 amd64 b)" "$dist6/bookworm/a.b.deb"
+if err=$("$ROOT/scripts/register.sh" --name app --dist-dir "$dist6" --repo example-org/app --tag v1.0 --out "$tmp/app.json" 2>&1); then
+  echo "❌ register must reject a~b.deb + a.b.deb (one stored asset name)"; fail=1
+else
+  printf '%s' "$err" | grep -q "'a.b.deb' appears in several release dirs" \
+    && echo "✅ names GitHub stores alike are duplicates" || { echo "❌ stored-name duplicate message, got: $err"; fail=1; }
+fi
+
 [ "$fail" = 0 ] && echo "PASS register_test" || { echo "FAIL register_test"; exit 1; }

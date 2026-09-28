@@ -123,7 +123,8 @@ done
 if [ "$VERIFY" = 1 ]; then
   while read -r url want; do
     got="$(curl -fsSL --retry 3 --retry-all-errors "$url" | sha256sum | cut -d' ' -f1)" || got=""   # pipefail: a failed download empties it
-    [ -n "$got" ] || { echo "❌ $url is not downloadable — upload the .debs to release $TAG first (as public assets)" >&2; exit 1; }
+    [ -n "$got" ] || { echo "❌ $url is not downloadable — upload the .debs to release $TAG first (as public assets)" >&2
+      echo "   (GitHub renames special characters in asset names — '~' is stored as '.', which the URL already expects)" >&2; exit 1; }
     [ "$got" = "$want" ] || { echo "❌ $url: sha256 mismatch (release asset $got, built .deb $want)" >&2; exit 1; }
   done < <(jq -r '.artifacts[] | "\(.url) \(.sha256)"' "$ref")
   echo "✅ release assets downloadable and matching"
