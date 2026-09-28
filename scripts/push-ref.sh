@@ -58,8 +58,8 @@ g(){ GIT_AUTHOR_NAME="$AUTHOR_NAME" GIT_AUTHOR_EMAIL="$AUTHOR_EMAIL" \
      GIT_COMMITTER_NAME="$AUTHOR_NAME" GIT_COMMITTER_EMAIL="$AUTHOR_EMAIL" git -C "$work" "$@"; }
 # 0 = the branch exists, 1 = it does not (ls-remote --exit-code says 2). Any other
 # failure — credentials, a missing repository, the network — stops here with
-# git's message: it must never pass for "no branch" (and, in self mode, for a
-# licence to create an orphan branch without the target's checks).
+# git's message: it must never pass for "no branch", which in self mode would
+# create an orphan branch that skips every check against the existing one.
 branch_exists(){
   local rc=0 err
   err="$(git ls-remote --exit-code --heads "$REMOTE" "$BRANCH" 2>&1 >/dev/null)" || rc=$?

@@ -162,10 +162,9 @@ make setup-repo REPO=acme/apt TAGS=              # Pages from Actions; only the 
 make key-to-repo REPO=acme/apt
 ```
 
-Then create a **GitHub App** with
-*Contents: read and write* and install it on `acme/apt` only. Store its ID as the
-org variable `APT_APP_ID` and its private key as the org secret
-`APT_APP_PRIVATE_KEY`.
+Then create a **GitHub App** with *Contents: read and write* and install it on
+`acme/apt` only. Store its ID as the org variable `APT_APP_ID` and its private
+key as the org secret `APT_APP_PRIVATE_KEY`.
 
 **Each client** (`acme/myapp`) builds and releases its `.deb`s exactly as in self
 mode, then pushes a reference into the collection:
