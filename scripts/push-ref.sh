@@ -15,8 +15,8 @@
 #          [--author-name <n>] [--author-email <e>]
 # --dists/--aliases/--arches are the workflow inputs of the same names. They are
 # layered over the target's dists.conf exactly as the publish will layer them
-# (scripts/ci-build.sh) — a self-mode branch has no conf/, so they are its only
-# release list.
+# (scripts/dists-overlay.sh; --aliases none = no aliases) — a self-mode branch
+# has no conf/, so they are its only release list.
 # --verify-assets downloads every referenced release asset (anonymously, as the
 # publish will) and checks its sha256: a reference to an asset that was never
 # uploaded, or that is private, would otherwise only fail the target's NEXT
@@ -72,9 +72,8 @@ fi
 INSTANCE="$work"; unset PKG_DIR DEBS_DIR OWNERS_CONF SITE_CONF DISTS_CONF INDEX_TEMPLATE
 . "$ENGINE/scripts/instance-lib.sh"; instance_init
 # the workflow's dists/aliases/arches inputs win over the target's dists.conf,
-# as they will at publish time; empty ones leave it unchanged
-"$ENGINE/scripts/conf-overlay.sh" "$DISTS_CONF" \
-  --set DISTS="$IN_DISTS" --set ALIASES="$IN_ALIASES" --set ARCHES="$IN_ARCHES" > "$tmpd/dists.conf"
+# layered by the same script the publish uses; empty ones leave it unchanged
+"$ENGINE/scripts/dists-overlay.sh" "$DISTS_CONF" "$IN_DISTS" "$IN_ALIASES" "$IN_ARCHES" > "$tmpd/dists.conf"
 DISTS_CONF="$tmpd/dists.conf"
 . "$ENGINE/scripts/dists-lib.sh"; dists_load "$DISTS_CONF"
 . "$ENGINE/scripts/owners-lib.sh"; owners_load "$OWNERS_CONF"

@@ -49,6 +49,15 @@ grep -q '^URIs: https://apt.acme.example$' "$tmp/site2/acme-debs.sources" && ok 
   && ok "dists/aliases inputs override dists.conf" || bad "dists inputs: $(ls "$tmp/site2/dists")"
 grep -q 'EPHEMERAL' "$tmp/ci2.log" && ok "ephemeral key is announced" || bad "no ephemeral warning"
 
+# a self-mode branch has no conf/: a dists input alone keeps the engine default
+# aliases that still have a target (stable:trixie) and drops the others
+make_instance "$tmp/selfmode"; make_deb "$INSTANCE/debs" widget 1.0 amd64 w >/dev/null
+if ci EPHEMERAL_KEY=1 SITE="$tmp/site6" INPUT_DISTS="bookworm trixie" >"$tmp/ci6.log" 2>&1 \
+   && grep -q '^Codename: trixie' "$tmp/site6/dists/stable/Release" && [ ! -e "$tmp/site6/dists/testing" ] \
+   && grep -q 'dropped alias(es) testing:forky unstable:sid' "$tmp/ci6.log"; then ok "dists input alone drops the dangling default aliases"
+else bad "dists input alone: $(grep '❌\|⚠️' "$tmp/ci6.log")"; fi
+INSTANCE="$tmp/acme-debs"
+
 pub="$(GNUPGHOME="$tmp/owner" gpg --batch --export --armor)"
 out="$(ci APT_SIGNING_KEY="$pub" SITE="$tmp/site3" 2>&1)" && bad "public-only key accepted" \
   || { printf '%s' "$out" | grep -q 'holds no private key' && ok "public-only secret rejected" || bad "public key message: $out"; }

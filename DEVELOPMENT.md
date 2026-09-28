@@ -12,6 +12,7 @@ scripts/                      # the build: hydrate, gen-index, render-index, reg
   dists-lib.sh                # loads + validates dists.conf (DISTS/ALIASES/ARCHES)
   owners-lib.sh               # conf/owners.conf: who may publish which package
   conf-overlay.sh             # workflow inputs layered over a committed config, as data
+  dists-overlay.sh            # the dists/aliases/arches inputs over dists.conf (publish + pre-push check)
   check-mode.sh               # the workflow's input validation + mode decision
   ci-build.sh                 # the build action's body: key import, overlays, make publish verify
   push-ref.sh                 # the register action's body: register, check against the target, push
@@ -166,8 +167,10 @@ In collection mode the build inputs (`dists`, `aliases`, `arches`, `repo-name`,
    3. Checks it against the **target's** config: releases and arches in its
       `dists.conf`, its `owners.conf`, and collisions with its other references.
       In self mode the `dists`/`aliases`/`arches` inputs are layered over that
-      `dists.conf` first, as the publish does: a fresh `apt` branch has no
-      `conf/` of its own.
+      `dists.conf` first by `scripts/dists-overlay.sh`, which the publish uses
+      too: a fresh `apt` branch has no `conf/` of its own. `aliases: none`
+      clears the aliases. `dists` without `aliases` drops every alias whose
+      target is no longer in `DISTS`, with a warning.
    4. Downloads every release asset anonymously and compares its sha256.
    5. Commits as `github-actions[bot]` and pushes. A push that loses a race with
       a concurrent publish is rebased and retried, up to 5 times with jitter.
@@ -268,7 +271,7 @@ into `GNUPGHOME`, then `make key-to-repo`.
 
 | Suite | Covers |
 | --- | --- |
-| `dists`, `instance`, `overlay` | config loading, path and identity resolution, input overlays |
+| `dists`, `instance`, `overlay`, `dists_overlay` | config loading, path and identity resolution, input overlays |
 | `hydrate`, `owners`, `register`, `schema` | pool assembly, allowlist, reference generation, the format |
 | `gen_index`, `render`, `apt` | signing (multi-key, expired keys), page rendering and escaping, a real sandboxed apt |
 | `make` | the Makefile end to end: key → add → register → publish → verify → preview, rotation, example/ |

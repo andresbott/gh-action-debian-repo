@@ -17,7 +17,7 @@ inputs:
     required: false
     default: ''
   aliases:
-    description: Overrides ALIASES in dists.conf (alias:codename ...).
+    description: Overrides ALIASES in dists.conf (alias:codename ...); 'none' = no aliases. Empty with dists set keeps only the dists.conf aliases whose codename is still in dists.
     required: false
     default: ''
   arches:

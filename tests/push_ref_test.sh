@@ -101,6 +101,12 @@ self relapp "$tmp/perrel" >/dev/null 2>&1 && bad "release outside the engine def
 self relapp "$tmp/perrel" --dists "bookworm trixie" --aliases stable:trixie >/dev/null 2>&1 \
   && git --git-dir="$tmp/app.git" show apt:packages/relapp.json >/dev/null 2>&1 \
   && ok "--dists overrides the target's releases (self mode)" || bad "--dists override"
+# --dists alone: the engine default aliases whose target left DISTS (testing:forky,
+# unstable:sid) are dropped instead of failing the check
+make_deb "$tmp/perrel2/bookworm" relapp2 1.0 amd64 bk >/dev/null
+out="$(self relapp2 "$tmp/perrel2" --dists "bookworm trixie" 2>&1)" \
+  && git --git-dir="$tmp/app.git" show apt:packages/relapp2.json >/dev/null 2>&1 \
+  && ok "--dists without --aliases (self mode) drops the dangling default aliases" || bad "--dists alone: $out"
 make_deb "$tmp/rv" rvapp 1.0 riscv64 rv >/dev/null
 self rvapp "$tmp/rv" --arches "amd64 riscv64" >/dev/null 2>&1 \
   && git --git-dir="$tmp/app.git" show apt:packages/rvapp.json >/dev/null 2>&1 \

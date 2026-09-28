@@ -189,7 +189,7 @@ another repository.
 | `self-branch` | `apt` | Self mode: the branch holding the references. It is created on first use. |
 | `instance-ref` | the run's ref | Publish-only: the ref holding the instance. |
 | `instance-path` | `.` | Directory of the instance inside that ref. |
-| `dists`, `aliases`, `arches` | `conf/dists.conf` | Releases, rolling aliases (`stable:trixie`) and architectures. In self mode the reference is also checked against them before it is pushed. Not allowed in collection mode. |
+| `dists`, `aliases`, `arches` | `conf/dists.conf` | Releases, rolling aliases (`stable:trixie`) and architectures. `aliases: none` publishes no aliases. With `dists` but no `aliases`, the configured aliases whose codename is not in `dists` are dropped with a warning (in self mode that is the engine default `stable:trixie testing:forky unstable:sid`). In self mode the reference is also checked against them before it is pushed. Not allowed in collection mode. |
 | `repo-name`, `site-title`, `site-tagline`, `theme` | `conf/site.conf` | Identity and page. See [Configuration](#configuration). Not allowed in collection mode. |
 | `engine-ref` | this release | Engine version to run. Only for testing the engine. |
 

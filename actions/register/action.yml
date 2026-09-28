@@ -36,7 +36,7 @@ inputs:
     required: false
     default: ''
   aliases:
-    description: Overrides the target's ALIASES for the pre-push check.
+    description: Overrides the target's ALIASES for the pre-push check; 'none' = no aliases. Empty with dists set keeps only the aliases whose codename is still in dists.
     required: false
     default: ''
   arches:

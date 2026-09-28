@@ -8,7 +8,7 @@
 #   APT_SIGNING_KEY   armored private key(s); required unless EPHEMERAL_KEY=1
 #   EPHEMERAL_KEY=1   sign with a generated throwaway key (engine CI/tests only:
 #                     clients could never verify such a repository)
-#   INPUT_DISTS INPUT_ALIASES INPUT_ARCHES                 -> dists.conf overlay
+#   INPUT_DISTS INPUT_ALIASES INPUT_ARCHES   -> dists.conf overlay (scripts/dists-overlay.sh)
 #   INPUT_REPO_NAME INPUT_SITE_TITLE INPUT_SITE_TAGLINE INPUT_THEME -> site.conf overlay
 #   BASE_URL          the Pages URL (configure-pages); REPO_URL when site.conf has none
 # Writes site=<dir> to $GITHUB_OUTPUT when set.
@@ -44,8 +44,7 @@ fi
 
 # --- workflow inputs -> config overlays (committed files stay untouched) ---
 base_dists="$("$ENGINE/scripts/instance-info.sh" DISTS_CONF)"
-"$ENGINE/scripts/conf-overlay.sh" "$base_dists" \
-  --set DISTS="${INPUT_DISTS:-}" --set ALIASES="${INPUT_ALIASES:-}" --set ARCHES="${INPUT_ARCHES:-}" > "$tmp/dists.conf"
+"$ENGINE/scripts/dists-overlay.sh" "$base_dists" "${INPUT_DISTS:-}" "${INPUT_ALIASES:-}" "${INPUT_ARCHES:-}" > "$tmp/dists.conf"
 "$ENGINE/scripts/conf-overlay.sh" "$INSTANCE/conf/site.conf" \
   --set REPO_NAME="${INPUT_REPO_NAME:-}" --set SITE_TITLE="${INPUT_SITE_TITLE:-}" \
   --set SITE_TAGLINE="${INPUT_SITE_TAGLINE:-}" --set THEME="${INPUT_THEME:-}" \

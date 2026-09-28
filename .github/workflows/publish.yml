@@ -66,7 +66,7 @@ on:
         type: string
         default: ''
       aliases:
-        description: Rolling-suite aliases (overrides conf/dists.conf), e.g. "stable:trixie".
+        description: Rolling-suite aliases (overrides conf/dists.conf), e.g. "stable:trixie"; "none" = no aliases. Empty with dists set keeps only the conf/dists.conf aliases whose codename is still in dists.
         type: string
         default: ''
       arches:
