@@ -31,6 +31,12 @@ if [ -n "${APT_SIGNING_KEY:-}" ]; then
     || { echo "❌ APT_SIGNING_KEY could not be imported (want an armored private key)" >&2; exit 1; }
   gpg --batch --list-secret-keys --with-colons | grep -q '^sec' \
     || { echo "❌ APT_SIGNING_KEY holds no private key — export it with 'make key-to-repo'" >&2; exit 1; }
+  # gen-index.sh signs with every usable key (same selection as its signing_keys):
+  # each must sign without a passphrase, as CI has no one to type it
+  probe=(); while read -r fpr; do probe+=(--local-user "$fpr"); done < <(gpg --batch --list-secret-keys --with-colons 2>/dev/null \
+    | awk -F: '$1=="sec"{want=($2!~/^[erdni]$/); next} want&&$1=="fpr"{print $10; want=0}')
+  [ ${#probe[@]} -eq 0 ] || echo probe | gpg --batch --pinentry-mode error "${probe[@]}" --clearsign >/dev/null 2>&1 \
+    || { echo "❌ APT_SIGNING_KEY cannot sign unattended (passphrase-protected?) — store an unprotected key with 'make key-to-repo'" >&2; exit 1; }
 elif [ "${EPHEMERAL_KEY:-}" = 1 ]; then
   echo "⚠️  signing with an EPHEMERAL key — no client can verify this repository"
   gpg --batch --pinentry-mode loopback --passphrase '' \

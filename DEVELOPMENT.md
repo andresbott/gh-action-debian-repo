@@ -200,7 +200,8 @@ config, and its base64 form is masked.
   3. Runs `configure-pages`.
   4. Runs `actions/build` (`scripts/ci-build.sh`), which does four things:
      - imports `APT_SIGNING_KEY` into a temporary `GNUPGHOME` outside the site
-       and the instance
+       and the instance, and proves every key in it signs without a passphrase
+       (a protected key fails here, not halfway through signing)
      - writes the input overlays to temporary `SITE_CONF`/`DISTS_CONF` files,
        leaving the committed files untouched
      - runs `make publish verify`

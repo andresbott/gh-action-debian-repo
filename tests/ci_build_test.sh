@@ -62,6 +62,19 @@ pub="$(GNUPGHOME="$tmp/owner" gpg --batch --export --armor)"
 out="$(ci APT_SIGNING_KEY="$pub" SITE="$tmp/site3" 2>&1)" && bad "public-only key accepted" \
   || { printf '%s' "$out" | grep -q 'holds no private key' && ok "public-only secret rejected" || bad "public key message: $out"; }
 out="$(ci APT_SIGNING_KEY="not a key" SITE="$tmp/site4" 2>&1)" && bad "garbage key accepted" || ok "garbage secret rejected"
+
+# a passphrase-protected key cannot sign unattended: rejected right after the
+# import, before any build step. The gpg first in PATH here adds
+# --pinentry-mode error to every call, so not even a regression can open a
+# pinentry dialog.
+install -d -m 700 "$tmp/prot"
+GNUPGHOME="$tmp/prot" gpg --batch --pinentry-mode loopback --passphrase sekrit \
+  --quick-generate-key "prot <prot@example.org>" default sign never >/dev/null 2>&1
+pkey="$(GNUPGHOME="$tmp/prot" gpg --batch --pinentry-mode loopback --passphrase sekrit --export-secret-keys --armor)"
+mkdir -p "$tmp/nopin"; printf '#!/bin/sh\nexec %s --pinentry-mode error "$@"\n' "$(command -v gpg)" > "$tmp/nopin/gpg"; chmod +x "$tmp/nopin/gpg"
+out="$(PATH="$tmp/nopin:$PATH" ci APT_SIGNING_KEY="$pkey" SITE="$tmp/site7" 2>&1)" && bad "passphrase-protected key accepted" \
+  || { printf '%s' "$out" | grep -qF "APT_SIGNING_KEY cannot sign unattended (passphrase-protected?) — store an unprotected key with 'make key-to-repo'" \
+       && [ ! -e "$tmp/site7/dists" ] && ok "passphrase-protected key rejected before the build" || bad "protected key: $out"; }
 ci EPHEMERAL_KEY=1 INPUT_DISTS='bookworm; touch pwned' SITE="$tmp/site5" >/dev/null 2>&1 && bad "invalid dists input accepted" || ok "invalid dists input rejected"
 [ ! -e pwned ] && [ ! -e "$INSTANCE/pwned" ] || bad "an input was executed"
 
