@@ -47,6 +47,10 @@ make_deb "$tmp/dup" other 2.0 amd64 d >/dev/null
 out="$("$ROOT/scripts/push-ref.sh" --remote "$REMOTE" --branch main --name other --dist-dir "$tmp/dup" \
   --repo acme/other --tag v2 --file packages/other.v2.json 2>&1)" && bad "colliding (package, release, arch) accepted" \
   || { printf '%s' "$out" | grep -q 'already provided by packages/other.json' && ok "collision with another reference rejected" || bad "collision message: $out"; }
+out="$(push --file packages/other.json 2>&1)" && bad "another package's reference overwritten" \
+  || { printf '%s' "$out" | grep -q "packages/other.json belongs to package 'other'" \
+       && [ "$(show packages/other.json | jq -r .name)" = other ] && ok "--file naming another package's reference rejected" \
+       || bad "foreign --file message: $out"; }
 for f in ../x.json packages/../x.json packages/sub/x.json packages/x.txt /etc/x.json; do
   push --file "$f" >/dev/null 2>&1 && bad "--file $f accepted" || ok "--file $f rejected"
 done

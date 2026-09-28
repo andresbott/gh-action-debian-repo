@@ -169,7 +169,8 @@ only pick the instance a publish-only run builds.
    1. Clones the target branch, creating it as an orphan in self mode. Only a
       branch the remote reports missing is created: a remote that cannot be
       read (credentials, a missing repository) fails with git's message.
-   2. Writes the reference with `register.sh`.
+   2. Writes the reference with `register.sh`. An existing `file` that
+      belongs to another package is never overwritten.
    3. Checks it against the **target's** config: releases and arches in its
       `dists.conf`, its `owners.conf`, and collisions with its other references
       and its committed `debs/`.

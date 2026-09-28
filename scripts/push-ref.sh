@@ -76,6 +76,12 @@ else
   echo "❌ branch '$BRANCH' not found in the target repository" >&2; exit 1
 fi
 
+# a reference file belongs to one package: never overwrite another package's
+if [ -f "$work/$FILE" ]; then
+  owner="$(jq -r '.name // empty' "$work/$FILE" 2>/dev/null)" || owner=""
+  [ -z "$owner" ] || [ "$owner" = "$NAME" ] \
+    || { echo "❌ $FILE belongs to package '$owner' — choose another --file for '$NAME'" >&2; exit 1; }
+fi
 "$ENGINE/scripts/register.sh" --name "$NAME" --dist-dir "$DIST_DIR" --repo "$SRC_REPO" --tag "$TAG" --out "$work/$FILE"
 
 # --- the target's rules, checked before anything is committed ---
