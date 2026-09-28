@@ -22,6 +22,11 @@ dists_validate() {
     printf '%s' "$name" | grep -qE '^[a-z0-9][a-z0-9.-]*$' \
       || { echo "❌ invalid suite name '$name'" >&2; return 1; }
   done
+  # each becomes a dists/<suite>/main/binary-<arch>/ path and an apt-ftparchive --arch
+  for name in $ARCHES; do
+    printf '%s' "$name" | grep -qE '^[a-z0-9][a-z0-9-]*$' \
+      || { echo "❌ invalid architecture name '$name'" >&2; return 1; }
+  done
   for pair in ${ALIASES:-}; do
     name="${pair%%:*}"; target="${pair##*:}"
     { [ "$name" != "$pair" ] && [ -n "$name" ] && [ -n "$target" ]; } \

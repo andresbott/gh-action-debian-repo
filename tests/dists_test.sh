@@ -30,9 +30,14 @@ for body in \
   'DISTS=""\nARCHES="amd64"' \
   'DISTS="bookworm"\nALIASES="stable:sid"\nARCHES="amd64"' \
   'DISTS="bookworm"\nALIASES="bookworm:bookworm"\nARCHES="amd64"' \
-  'DISTS="Bad Name"\nARCHES="amd64"' ; do
+  'DISTS="Bad Name"\nARCHES="amd64"' \
+  'DISTS="bookworm"\nARCHES="amd64,arm64"' \
+  'DISTS="bookworm"\nARCHES="amd64 ARM64"' ; do
   c="$tmp/bad.conf"; printf "$body\n" > "$c"
   [ "$(try_load "$c")" = REJECTED ] && ok "rejected: $body" || bad "should reject: $body"
 done
+printf 'DISTS="bookworm"\nARCHES="amd64,arm64"\n' > "$tmp/arch.conf"
+err="$( ( . "$ROOT/scripts/dists-lib.sh"; dists_load "$tmp/arch.conf" ) 2>&1 )"
+[ "$err" = "❌ invalid architecture name 'amd64,arm64'" ] && ok "an invalid ARCHES entry is named" || bad "arch message: $err"
 
 [ "$fail" = 0 ] && echo "PASS dists_test" || { echo "FAIL dists_test"; exit 1; }
