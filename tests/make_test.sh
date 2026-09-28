@@ -18,8 +18,13 @@ printf 'DISTS="bookworm trixie"\nALIASES="stable:bookworm"\nARCHES="amd64"\n' > 
 mkdir -p "$inst/conf"; cp "$tmp/d.conf" "$inst/conf/dists.conf"
 
 m build >/dev/null 2>&1 && bad "build without a key must fail" || ok "build refuses without a key"
+git init --quiet "$inst"   # an instance is a git checkout: its private key must never show up as committable
 m key >/dev/null 2>&1 && [ -d "$inst/.gnupg-repo" ] && ok "make key -> instance-local keyring" || bad "make key failed"
 m key >/dev/null 2>&1 && bad "second 'make key' must refuse" || ok "second 'make key' refuses"
+m backup-key >/dev/null 2>&1 && [ -s "$inst/.gnupg-repo/signing-key.secret.asc" ] \
+  && ok "make backup-key -> inside the keyring directory" || bad "make backup-key: $(ls -A "$inst" "$inst/.gnupg-repo")"
+leak="$(git -C "$inst" status --porcelain --untracked-files=all | grep -E '\.gnupg-repo/|\.secret\.asc$')"
+[ -z "$leak" ] && ok "keyring and key backup are git-ignored" || bad "private key material committable: $leak"
 
 m add DEB="$(make_deb "$tmp/b" widget 1.0 amd64 w)" >/dev/null && [ -f "$inst/debs/widget_1.0_w_amd64.deb" ] \
   && ok "make add -> debs/" || bad "make add"
@@ -62,11 +67,15 @@ inc="$tmp/inc"; mkdir -p "$inc"; printf 'include %s/Makefile\n' "$ROOT" > "$inc/
 [ "$(make --no-print-directory -C "$inc" help 2>/dev/null | sed -n 1,2p | tr '\n' '|')" = "engine:   $ROOT|instance: $inc|" ] \
   && make --no-print-directory -C "$inc" validate >/dev/null 2>&1 \
   && ok "include <engine>/Makefile from an instance" || bad "include of the engine Makefile"
-exa="$tmp/example"; cp -r "$ROOT/example" "$exa"; rm -rf "$exa/debs" "$exa/_site"
+exa="$tmp/example"; cp -r "$ROOT/example" "$exa"; rm -rf "$exa/debs" "$exa/_site"; git init --quiet "$exa"
 if make --no-print-directory -C "$ROOT" INSTANCE="$exa" GNUPGHOME="$tmp/exg" KEY_EMAIL=t@example.org \
         EXAMPLE_DEBS="$exa/debs" key example-debs >/dev/null 2>&1 \
    && make --no-print-directory -C "$ROOT" INSTANCE="$exa" GNUPGHOME="$tmp/exg" publish verify >/dev/null 2>&1; then
   ok "example instance: example-debs + publish + verify"
 else bad "example instance build"; fi
+# a copy of example/ ignores its build output (its debs/ stay committable)
+junk="$(git -C "$exa" status --porcelain --untracked-files=all | grep -E '^\?\? (_site|\.cache)/')"
+[ -z "$junk" ] && [ -f "$exa/_site/index.html" ] && git -C "$exa" status --porcelain | grep -q '^?? debs/' \
+  && ok "example/.gitignore: build output ignored, debs/ kept" || bad "example/.gitignore: $junk"
 
 [ "$fail" = 0 ] && echo "PASS make_test" || { echo "FAIL make_test"; exit 1; }

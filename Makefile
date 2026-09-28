@@ -44,6 +44,10 @@ INFO      := $(SCRIPTS)/instance-info.sh
 # the tree; `?=` lets that win.
 GNUPGHOME ?= $(INSTANCE)/.gnupg-repo
 export GNUPGHOME
+# A keyring directory ignores itself: `key` and `backup-key` drop a `*`
+# .gitignore into it, so neither the private key nor the backup written next to
+# it can be committed — wherever GNUPGHOME points, whatever the instance ignores.
+KEYRING_IGNORE = [ -e "$(GNUPGHOME)/.gitignore" ] || printf '%s\n' '*' > "$(GNUPGHOME)/.gitignore"
 
 # `preview` renders into, and `serve` serves, the built site when it has
 # packages — else a demo page in .cache/preview, so an empty repository's design
@@ -160,7 +164,7 @@ example-debs: ## generate sample .debs into example/debs (git-ignored) for a pop
 .PHONY: key
 key: ## generate a GPG signing key (refuses if one exists; ROTATE=1 adds another for a key rotation)
 	@[ "$(KEY_EMAIL)" ] || { echo "❌ KEY_EMAIL is empty (set it, or git config user.email)"; exit 1; }
-	@mkdir -p -m 700 "$(GNUPGHOME)"
+	@mkdir -p -m 700 "$(GNUPGHOME)"; $(KEYRING_IGNORE)
 	@if [ -z "$(ROTATE)" ] && gpg --batch --list-secret-keys --with-colons 2>/dev/null | grep -q '^sec'; then \
 	   echo "⚠️  $(GNUPGHOME) already holds a signing key — refusing to add another"; \
 	   echo ">> 'make key-info' to inspect it; 'make key ROTATE=1' to add a second key for a rotation"; exit 1; fi
@@ -171,9 +175,10 @@ key: ## generate a GPG signing key (refuses if one exists; ROTATE=1 adds another
 	@echo "✅ signing key created. next: 'make backup-key', then 'make setup-repo REPO=owner/name' and 'make key-to-repo REPO=owner/name'"
 
 .PHONY: backup-key
-backup-key: require-key ## export the PRIVATE signing key(s), armored, for an offline/vault backup
-	@out="$(INSTANCE)/signing-key.secret.asc"; umask 077; gpg --batch --export-secret-keys --armor > "$$out"; \
-	 echo "✅ wrote $$out (armored PRIVATE key — git-ignored)"; \
+backup-key: require-key ## export the PRIVATE signing key(s), armored, into the (git-ignored) keyring dir for a vault backup
+	@$(KEYRING_IGNORE)
+	@out="$(GNUPGHOME)/signing-key.secret.asc"; umask 077; gpg --batch --export-secret-keys --armor > "$$out"; \
+	 echo "✅ wrote $$out (armored PRIVATE key — private to you, and git-ignored like the keyring it sits in)"; \
 	 echo "⚠️  move it to your password vault, then: shred -u $$out"
 
 .PHONY: key-info

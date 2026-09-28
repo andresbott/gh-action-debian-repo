@@ -220,9 +220,10 @@ scripts therefore always come from the same release.
 revoked and disabled keys are skipped. `SIGNING_KEYS="<fpr> …"` narrows the set.
 The published keyring contains every signing key.
 
-Locally, the keyring lives in the git-ignored `$(INSTANCE)/.gnupg-repo/` unless
-`GNUPGHOME` is set. In CI it is a temporary directory. It is never inside the
-site or a checkout.
+Locally, the keyring lives in `$(INSTANCE)/.gnupg-repo/` unless `GNUPGHOME` is
+set. `make key` writes a `.gitignore` of `*` into the keyring directory, so git
+never offers it for a commit, wherever `GNUPGHOME` points. In CI it is a
+temporary directory. It is never inside the site.
 
 apt accepts a signature from any key it trusts, even when other signatures on
 the file are unknown to it. Rotation relies on that:
@@ -235,9 +236,10 @@ the file are unknown to it. Rotation relies on that:
    Clients that never re-downloaded the keyring stop verifying at this point.
    apt has no key-update channel, so plan phase 1 long enough.
 
-`make backup-key` writes `$(INSTANCE)/signing-key.secret.asc`, which is
-git-ignored. Move it into a vault. To restore, run `gpg --import` into
-`GNUPGHOME`, then `make key-to-repo`.
+`make backup-key` writes `$(GNUPGHOME)/signing-key.secret.asc` (mode 600). It
+sits inside the keyring directory, so it is private and git-ignored along with
+it. Move it into a vault, then `shred -u` it. To restore, run `gpg --import`
+into `GNUPGHOME`, then `make key-to-repo`.
 
 ## Security model
 

@@ -117,8 +117,17 @@ jobs:
     secrets: inherit
 ```
 
-Set it up once with `make key`, `make backup-key`, `make setup-repo REPO=acme/apt TAGS=`
-and then `make key-to-repo REPO=acme/apt`. Then create a **GitHub App** with
+Set it up once, as in self mode, from a checkout of this repository:
+
+```bash
+export GNUPGHOME=~/.apt-keys/acme-apt            # keep the private key out of every checkout
+make key KEY_NAME="Acme APT repository" KEY_EMAIL=you@example.org
+make backup-key                                  # then move the file into your password vault
+make setup-repo REPO=acme/apt TAGS=              # Pages from Actions; only the default branch may deploy
+make key-to-repo REPO=acme/apt
+```
+
+Then create a **GitHub App** with
 *Contents: read and write* and install it on `acme/apt` only. Store its ID as the
 org variable `APT_APP_ID` and its private key as the org secret
 `APT_APP_PRIVATE_KEY`.
