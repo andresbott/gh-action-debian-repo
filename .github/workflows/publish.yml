@@ -1,0 +1,242 @@
+# The reusable workflow repositories call to publish .debs as a signed APT
+# repository on GitHub Pages. One workflow, three modes, chosen from the inputs
+# by scripts/check-mode.sh:
+#
+#   self          name + artifact              reference pushed to this repository's
+#                                              `self-branch` (created on first use),
+#                                              then its Pages are rebuilt and deployed
+#   collection    name + artifact + collection reference pushed to the collection
+#                                              repository; ITS publish run deploys
+#   publish-only  (neither)                    rebuild and deploy this repository's
+#                                              instance (a collection's own workflow)
+#
+# No `permissions:` here: the caller grants what its mode needs —
+#   self: contents: write, pages: write, id-token: write
+#   collection: contents: read
+#   publish-only: contents: read, pages: write, id-token: write
+# The signing key is the APT_SIGNING_KEY secret of the caller's github-pages
+# environment (`make key-to-repo`), or passed explicitly under `secrets:`.
+name: debian-repo
+
+on:
+  workflow_call:
+    inputs:
+      name:
+        description: Debian package to publish. Empty = publish-only.
+        type: string
+        default: ''
+      artifact:
+        description: Name of an artifact uploaded earlier in this run holding the .debs (flat = every release, or <release>/*.deb).
+        type: string
+        default: ''
+      tag:
+        description: Release whose assets are the .debs. Default = the tag this run is for.
+        type: string
+        default: ''
+      file:
+        description: Reference file, packages/<name>.json by default (one file per version group).
+        type: string
+        default: ''
+      collection:
+        description: owner/name of a shared collection repository. Empty = this repository (self mode).
+        type: string
+        default: ''
+      collection-branch:
+        description: Branch of the collection repository holding its instance.
+        type: string
+        default: main
+      app-id:
+        description: GitHub App allowed to push to the collection (with the app-private-key secret).
+        type: string
+        default: ''
+      self-branch:
+        description: Self mode — the branch holding this repository's references (kept apart from the code).
+        type: string
+        default: apt
+      instance-ref:
+        description: Publish-only — the ref holding the instance. Default = the ref this run is for. Rejected with name.
+        type: string
+        default: ''
+      instance-path:
+        description: Publish-only — directory of the instance inside that ref. Rejected with name.
+        type: string
+        default: .
+      dists:
+        description: Codenames to publish (overrides conf/dists.conf), e.g. "bookworm trixie".
+        type: string
+        default: ''
+      aliases:
+        description: Rolling-suite aliases (overrides conf/dists.conf), e.g. "stable:trixie"; "none" = no aliases. Empty with dists set keeps only the conf/dists.conf aliases whose codename is still in dists.
+        type: string
+        default: ''
+      arches:
+        description: Architectures (overrides conf/dists.conf), e.g. "amd64 arm64".
+        type: string
+        default: ''
+      repo-name:
+        description: Names the keyring and .sources files (default <owner>-<repo>).
+        type: string
+        default: ''
+      site-title:
+        description: Landing page title.
+        type: string
+        default: ''
+      site-tagline:
+        description: Landing page tagline.
+        type: string
+        default: ''
+      theme:
+        description: Landing page colour theme (violet, amber, blue, rose, teal).
+        type: string
+        default: ''
+      engine-ref:
+        description: Engine ref to run (testing only). Default = the release this workflow file belongs to.
+        type: string
+        default: ''
+    secrets:
+      APT_SIGNING_KEY:
+        description: Armored private signing key. Default = the github-pages environment secret.
+        required: false
+      collection-token:
+        description: Token allowed to push to the collection (when not using app-id).
+        required: false
+      app-private-key:
+        description: Private key of the app-id GitHub App.
+        required: false
+    outputs:
+      mode:
+        description: self, collection or publish-only (empty = publish-only).
+        value: ${{ jobs.register.outputs.mode }}
+      page-url:
+        description: URL of the deployed repository (self and publish-only).
+        value: ${{ jobs.publish.outputs.page-url }}
+
+jobs:
+  register:
+    if: inputs.name != '' || inputs.artifact != '' || inputs.collection != '' || inputs.app-id != '' || inputs.file != '' || inputs.tag != ''
+    runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.mode.outputs.mode }}
+      branch: ${{ steps.mode.outputs.branch }}
+    steps:
+      - name: Check out the engine
+        uses: actions/checkout@v5
+        with:
+          repository: andresbott/gh-action-debian-repo
+          # rewritten by scripts/release.sh: each release runs its own scripts
+          ref: ${{ inputs.engine-ref || 'v1.0.0-rc.1' }}
+          path: .debrepo-engine
+          persist-credentials: false
+      - name: Check the inputs
+        id: mode
+        env:
+          IN_NAME: ${{ inputs.name }}
+          IN_ARTIFACT: ${{ inputs.artifact }}
+          IN_TAG: ${{ inputs.tag }}
+          IN_FILE: ${{ inputs.file }}
+          IN_COLLECTION: ${{ inputs.collection }}
+          IN_COLLECTION_BRANCH: ${{ inputs.collection-branch }}
+          IN_SELF_BRANCH: ${{ inputs.self-branch }}
+          IN_APP_ID: ${{ inputs.app-id }}
+          IN_INSTANCE_REF: ${{ inputs.instance-ref }}
+          IN_INSTANCE_PATH: ${{ inputs.instance-path }}
+          IN_DISTS: ${{ inputs.dists }}
+          IN_ALIASES: ${{ inputs.aliases }}
+          IN_ARCHES: ${{ inputs.arches }}
+          IN_REPO_NAME: ${{ inputs.repo-name }}
+          IN_SITE_TITLE: ${{ inputs.site-title }}
+          IN_SITE_TAGLINE: ${{ inputs.site-tagline }}
+          IN_THEME: ${{ inputs.theme }}
+          HAS_APP_KEY: ${{ secrets.app-private-key != '' }}
+          HAS_COLLECTION_TOKEN: ${{ secrets.collection-token != '' }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: ./.debrepo-engine/scripts/check-mode.sh
+      - name: Download the .debs
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: ${{ runner.temp }}/debrepo-dist
+      - name: Mint a collection token
+        id: app
+        if: inputs.app-id != ''
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ inputs.app-id }}
+          private-key: ${{ secrets.app-private-key }}
+          owner: ${{ steps.mode.outputs.target-owner }}
+          repositories: ${{ steps.mode.outputs.target-name }}
+      - name: Register and push the reference
+        uses: ./.debrepo-engine/actions/register
+        with:
+          name: ${{ inputs.name }}
+          dist-dir: ${{ runner.temp }}/debrepo-dist
+          repository: ${{ steps.mode.outputs.target }}
+          branch: ${{ steps.mode.outputs.branch }}
+          source-repository: ${{ github.repository }}
+          tag: ${{ steps.mode.outputs.tag }}
+          file: ${{ inputs.file }}
+          create-branch: ${{ steps.mode.outputs.mode == 'self' }}
+          # self mode: the apt branch has no conf/, so the reference is checked
+          # against the releases the publish job builds with. Never in collection
+          # mode (check-mode rejects them there): the collection's conf/ decides.
+          dists: ${{ steps.mode.outputs.mode == 'self' && inputs.dists || '' }}
+          aliases: ${{ steps.mode.outputs.mode == 'self' && inputs.aliases || '' }}
+          arches: ${{ steps.mode.outputs.mode == 'self' && inputs.arches || '' }}
+          token: ${{ steps.app.outputs.token || secrets.collection-token || github.token }}
+
+  publish:
+    needs: register
+    # after register in self mode; alone (register skipped) in publish-only mode;
+    # never in collection mode — the collection's own run deploys it
+    if: ${{ !cancelled() && !failure() && inputs.collection == '' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # one deploy at a time per repository; each is a full rebuild from the
+    # latest references, so a queued run supersedes one still waiting
+    concurrency:
+      group: debian-repo-pages-${{ github.repository }}
+      cancel-in-progress: false
+    outputs:
+      page-url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Check out the instance
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.register.outputs.branch || inputs.instance-ref }}
+          path: instance
+          persist-credentials: false
+      - name: Check out the engine
+        uses: actions/checkout@v5
+        with:
+          repository: andresbott/gh-action-debian-repo
+          # rewritten by scripts/release.sh: each release runs its own scripts
+          ref: ${{ inputs.engine-ref || 'v1.0.0-rc.1' }}
+          path: .debrepo-engine
+          persist-credentials: false
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+      - name: Build and sign
+        id: build
+        uses: ./.debrepo-engine/actions/build
+        with:
+          instance: instance/${{ inputs.instance-path }}
+          signing-key: ${{ secrets.APT_SIGNING_KEY }}
+          base-url: ${{ steps.pages.outputs.base_url }}
+          dists: ${{ inputs.dists }}
+          aliases: ${{ inputs.aliases }}
+          arches: ${{ inputs.arches }}
+          repo-name: ${{ inputs.repo-name }}
+          site-title: ${{ inputs.site-title }}
+          site-tagline: ${{ inputs.site-tagline }}
+          theme: ${{ inputs.theme }}
+      - name: Upload the site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ${{ steps.build.outputs.site }}
+      - name: Deploy
+        id: deploy
+        uses: actions/deploy-pages@v4

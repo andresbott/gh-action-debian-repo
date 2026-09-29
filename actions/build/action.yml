@@ -1,0 +1,74 @@
+name: debian-repo build
+description: Build and sign the static APT repository of an instance checkout (scripts/ci-build.sh), ready for actions/upload-pages-artifact.
+inputs:
+  instance:
+    description: Path of the instance checkout (packages/, debs/, conf/).
+    required: true
+  signing-key:
+    description: Armored private signing key(s) — the APT_SIGNING_KEY secret.
+    required: false
+    default: ''
+  base-url:
+    description: The Pages URL (actions/configure-pages base_url); REPO_URL unless conf/site.conf sets one.
+    required: false
+    default: ''
+  dists:
+    description: Overrides DISTS in dists.conf (space-separated codenames).
+    required: false
+    default: ''
+  aliases:
+    description: Overrides ALIASES in dists.conf (alias:codename ...); 'none' = no aliases. Empty with dists set keeps only the dists.conf aliases whose codename is still in dists.
+    required: false
+    default: ''
+  arches:
+    description: Overrides ARCHES in dists.conf.
+    required: false
+    default: ''
+  repo-name:
+    description: Overrides REPO_NAME (names the keyring and .sources files).
+    required: false
+    default: ''
+  site-title:
+    description: Overrides SITE_TITLE.
+    required: false
+    default: ''
+  site-tagline:
+    description: Overrides SITE_TAGLINE.
+    required: false
+    default: ''
+  theme:
+    description: Overrides THEME (violet, amber, blue, rose, teal, or an instance conf/themes/<name>.css).
+    required: false
+    default: ''
+outputs:
+  site:
+    description: Directory holding the built site.
+    value: ${{ steps.build.outputs.site }}
+runs:
+  using: composite
+  steps:
+    - name: Install build tools
+      shell: bash
+      run: |
+        missing=()
+        for pair in apt-ftparchive:apt-utils jq:jq gpgv:gpgv dpkg-deb:dpkg; do
+          command -v "${pair%%:*}" >/dev/null || missing+=("${pair#*:}")
+        done
+        if [ ${#missing[@]} -gt 0 ]; then
+          sudo apt-get update -qq && sudo apt-get install -y -qq --no-install-recommends "${missing[@]}"
+        fi
+    - id: build
+      name: Build and sign
+      shell: bash
+      env:
+        INSTANCE: ${{ inputs.instance }}
+        APT_SIGNING_KEY: ${{ inputs.signing-key }}
+        BASE_URL: ${{ inputs.base-url }}
+        INPUT_DISTS: ${{ inputs.dists }}
+        INPUT_ALIASES: ${{ inputs.aliases }}
+        INPUT_ARCHES: ${{ inputs.arches }}
+        INPUT_REPO_NAME: ${{ inputs.repo-name }}
+        INPUT_SITE_TITLE: ${{ inputs.site-title }}
+        INPUT_SITE_TAGLINE: ${{ inputs.site-tagline }}
+        INPUT_THEME: ${{ inputs.theme }}
+      run: '"$GITHUB_ACTION_PATH/../../scripts/ci-build.sh"'

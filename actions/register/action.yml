@@ -1,0 +1,83 @@
+name: debian-repo register
+description: Write a packages/*.json reference for built .debs and push it to a repository instance (scripts/push-ref.sh).
+inputs:
+  name:
+    description: Debian package name.
+    required: true
+  dist-dir:
+    description: Directory of built .debs (flat = every release, or <release>/*.deb).
+    required: true
+  repository:
+    description: Target repository (owner/name) holding the instance.
+    required: true
+  branch:
+    description: Target branch.
+    required: true
+  source-repository:
+    description: Repository whose release holds the .debs (owner/name).
+    required: true
+  tag:
+    description: Release tag holding the .debs as assets.
+    required: true
+  file:
+    description: Reference file (packages/<name>.json by default).
+    required: false
+    default: ''
+  create-branch:
+    description: Create the target branch (orphan) when it does not exist.
+    required: false
+    default: 'false'
+  verify-assets:
+    description: Check every release asset is publicly downloadable and matches before pushing.
+    required: false
+    default: 'true'
+  dists:
+    description: Overrides the target's DISTS for the pre-push check (self mode passes the workflow's dists input, which the publish builds with).
+    required: false
+    default: ''
+  aliases:
+    description: Overrides the target's ALIASES for the pre-push check; 'none' = no aliases. Empty with dists set keeps only the aliases whose codename is still in dists.
+    required: false
+    default: ''
+  arches:
+    description: Overrides the target's ARCHES for the pre-push check.
+    required: false
+    default: ''
+  token:
+    description: Token allowed to push to the target repository.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Register and push
+      shell: bash
+      env:
+        TOKEN: ${{ inputs.token }}
+        NAME: ${{ inputs.name }}
+        DIST_DIR: ${{ inputs.dist-dir }}
+        TARGET: ${{ inputs.repository }}
+        BRANCH: ${{ inputs.branch }}
+        SOURCE: ${{ inputs.source-repository }}
+        TAG: ${{ inputs.tag }}
+        FILE: ${{ inputs.file }}
+        CREATE: ${{ inputs.create-branch }}
+        VERIFY: ${{ inputs.verify-assets }}
+        IN_DISTS: ${{ inputs.dists }}
+        IN_ALIASES: ${{ inputs.aliases }}
+        IN_ARCHES: ${{ inputs.arches }}
+      run: |
+        # the token reaches git as an HTTP header through environment config —
+        # never in the remote URL, the command line or a file
+        auth="$(printf 'x-access-token:%s' "$TOKEN" | base64 -w0)"
+        echo "::add-mask::$auth"
+        export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.https://github.com/.extraheader \
+               GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $auth"
+        args=(--remote "https://github.com/$TARGET.git" --branch "$BRANCH" --name "$NAME"
+              --dist-dir "$DIST_DIR" --repo "$SOURCE" --tag "$TAG")
+        [ -z "$FILE" ] || args+=(--file "$FILE")
+        [ "$CREATE" != true ] || args+=(--create-branch)
+        [ "$VERIFY" != true ] || args+=(--verify-assets)
+        [ -z "$IN_DISTS" ] || args+=(--dists "$IN_DISTS")
+        [ -z "$IN_ALIASES" ] || args+=(--aliases "$IN_ALIASES")
+        [ -z "$IN_ARCHES" ] || args+=(--arches "$IN_ARCHES")
+        "$GITHUB_ACTION_PATH/../../scripts/push-ref.sh" "${args[@]}"

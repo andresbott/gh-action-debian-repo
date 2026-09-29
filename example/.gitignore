@@ -1,0 +1,7 @@
+# An instance commits packages/, debs/ and conf/. Never its build output, and
+# never a private key: the signing keyring (`make key`) and exported private
+# keys (`make backup-key`, which writes into the keyring directory).
+_site/
+.cache/
+.gnupg-repo/
+*.secret.asc
