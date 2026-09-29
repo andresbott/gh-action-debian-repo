@@ -234,7 +234,7 @@ jobs:
           site-tagline: ${{ inputs.site-tagline }}
           theme: ${{ inputs.theme }}
       - name: Upload the site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ steps.build.outputs.site }}
       - name: Deploy
