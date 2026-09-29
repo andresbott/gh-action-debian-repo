@@ -160,7 +160,7 @@ jobs:
       - name: Mint a collection token
         id: app
         if: inputs.app-id != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.app-private-key }}
