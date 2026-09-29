@@ -120,7 +120,7 @@ jobs:
       branch: ${{ steps.mode.outputs.branch }}
     steps:
       - name: Check out the engine
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: andresbott/gh-action-debian-repo
           # rewritten by scripts/release.sh: each release runs its own scripts
@@ -203,13 +203,13 @@ jobs:
       page-url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Check out the instance
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.register.outputs.branch || inputs.instance-ref }}
           path: instance
           persist-credentials: false
       - name: Check out the engine
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: andresbott/gh-action-debian-repo
           # rewritten by scripts/release.sh: each release runs its own scripts
