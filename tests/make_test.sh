@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # End to end through the Makefile, run from an instance directory the way a
-# repository maintainer uses it: key -> add -> register -> publish -> verify ->
+# repository maintainer uses it: key -> add -> register -> publish -> verify-site ->
 # preview, plus the key-rotation guard, the example instance and an instance
 # Makefile that includes the engine's.
 set -uo pipefail
@@ -40,16 +40,16 @@ rm -f "$inst/packages/tool.json"   # its URL is not downloadable here
 if m publish >/dev/null 2>&1; then ok "make publish"; else bad "make publish: $(m publish 2>&1 | tail -3)"; fi
 [ -f "$inst/_site/acme-debs-archive-keyring.gpg" ] && [ -f "$inst/_site/acme-debs.sources" ] \
   && ok "identity derived from the instance directory" || bad "keyring/sources not named after the instance"
-out="$(m verify 2>&1)" && ok "make verify" || bad "make verify: $out"
-printf '%s' "$out" | grep -q 'stable signature OK' || bad "verify must cover the alias suites"
+out="$(m verify-site 2>&1)" && ok "make verify-site" || bad "make verify-site: $out"
+printf '%s' "$out" | grep -q 'stable signature OK' || bad "verify-site must cover the alias suites"
 
-# a tampered Release must fail verify
+# a tampered Release must fail verify-site
 cp "$inst/_site/dists/trixie/InRelease" "$tmp/ir"; sed -i 's/^Suite: trixie/Suite: evil/' "$inst/_site/dists/trixie/InRelease"
-m verify >/dev/null 2>&1 && bad "verify accepted a tampered InRelease" || ok "verify rejects a tampered InRelease"
+m verify-site >/dev/null 2>&1 && bad "verify-site accepted a tampered InRelease" || ok "verify-site rejects a tampered InRelease"
 cp "$tmp/ir" "$inst/_site/dists/trixie/InRelease"
 
 # rotation: a second key signs alongside the first and both are published
-m key ROTATE=1 KEY_EMAIL=new@example.org >/dev/null 2>&1 && m build >/dev/null 2>&1 && m verify >/dev/null 2>&1 \
+m key ROTATE=1 KEY_EMAIL=new@example.org >/dev/null 2>&1 && m build >/dev/null 2>&1 && m verify-site >/dev/null 2>&1 \
   && [ "$(gpg --show-keys --with-colons "$inst/_site/acme-debs-archive-keyring.gpg" 2>/dev/null | grep -c '^pub')" = 2 ] \
   && ok "key rotation: two keys sign and are published" || bad "key rotation"
 
@@ -74,6 +74,12 @@ for c in bash sh make env dirname basename tr grep awk find cat; do ln -s "$(com
 out="$(PATH="$nojs" vm validate 2>&1)" && printf '%s' "$out" | grep -q 'check-jsonschema not found — skipping schema validation' \
   && ok "validate without a schema validator warns and passes" || bad "validate without a validator: $out"
 
+# verify is the pre-push check of the engine's code (the tests, then the lint),
+# never the site check (make -n: printed, not run)
+vn="$(make --no-print-directory -C "$ROOT" -n verify 2>/dev/null)"
+printf '%s' "$vn" | grep -q '_test.sh' && printf '%s' "$vn" | grep -q 'actionlint' && ! printf '%s' "$vn" | grep -q gpgv \
+  && ok "make verify runs the tests and the lint" || bad "make verify: $vn"
+
 # the engine checkout builds its bundled example instance
 [ "$(make --no-print-directory -C "$ROOT" help 2>/dev/null | sed -n 2p)" = "instance: $ROOT/example" ] \
   && ok "engine checkout defaults to example/" || bad "engine checkout instance"
@@ -85,8 +91,8 @@ inc="$tmp/inc"; mkdir -p "$inc"; printf 'include %s/Makefile\n' "$ROOT" > "$inc/
 exa="$tmp/example"; cp -r "$ROOT/example" "$exa"; rm -rf "$exa/debs" "$exa/_site"; git init --quiet "$exa"
 if make --no-print-directory -C "$ROOT" INSTANCE="$exa" GNUPGHOME="$tmp/exg" KEY_EMAIL=t@example.org \
         EXAMPLE_DEBS="$exa/debs" key example-debs >/dev/null 2>&1 \
-   && make --no-print-directory -C "$ROOT" INSTANCE="$exa" GNUPGHOME="$tmp/exg" publish verify >/dev/null 2>&1; then
-  ok "example instance: example-debs + publish + verify"
+   && make --no-print-directory -C "$ROOT" INSTANCE="$exa" GNUPGHOME="$tmp/exg" publish verify-site >/dev/null 2>&1; then
+  ok "example instance: example-debs + publish + verify-site"
 else bad "example instance build"; fi
 # a copy of example/ ignores its build output (its debs/ stay committable)
 junk="$(git -C "$exa" status --porcelain --untracked-files=all | grep -E '^\?\? (_site|\.cache)/')"

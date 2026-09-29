@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The build action's body (actions/build/action.yml): turn the workflow inputs
 # into config overlays, import the signing key into a throwaway keyring outside
-# the site, then `make publish verify` for the instance. Runnable locally too.
+# the site, then `make publish verify-site` for the instance. Runnable locally too.
 # Env:
 #   INSTANCE          instance checkout (required)
 #   SITE              output directory (default: $RUNNER_TEMP/debrepo-site)
@@ -57,6 +57,6 @@ base_dists="$("$ENGINE/scripts/instance-info.sh" DISTS_CONF)"
   --default REPO_URL="${BASE_URL:-}" > "$tmp/site.conf"
 export DISTS_CONF="$tmp/dists.conf" SITE_CONF="$tmp/site.conf"
 
-make --no-print-directory -f "$ENGINE/Makefile" SITE="$SITE" publish verify
+make --no-print-directory -f "$ENGINE/Makefile" SITE="$SITE" publish verify-site
 [ -z "${GITHUB_OUTPUT:-}" ] || echo "site=$SITE" >> "$GITHUB_OUTPUT"
 echo "✅ site ready: $SITE ($("$ENGINE/scripts/instance-info.sh" REPO_URL))"

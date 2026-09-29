@@ -1,7 +1,27 @@
-# gh-action-debian-repo: developer manual
+# Developing gh-action-debian-repo
 
-How the engine works inside, how to operate a repository, and how to release the
-engine. For using it, see [README.md](README.md).
+How to work on the engine: setting it up, its conventions, the tests, trying a
+change on GitHub, contributing, how it works inside, and releasing it. For using
+it, see the [README](README.md) and [`docs/`](docs/).
+
+## Getting started
+
+You need `bash`, `make`, `git`, `gpg`/`gpgv`, `dpkg-deb`, `apt-ftparchive`
+(`apt-utils`), `apt-get`, `jq`, `curl`, `python3` with `yaml`, one of
+`check-jsonschema`, `uvx` or `pipx`, and `docker` for `make lint`.
+
+```bash
+make verify                               # before a push: make test, then make lint
+make test                                 # every test suite, about a minute
+make lint                                 # actionlint + shellcheck, through docker
+make key KEY_EMAIL=you@example.org        # once: a local key for the example, in example/.gnupg-repo (git-ignored)
+make example-debs publish verify-site serve  # sample packages, the full CI build, apt's checks, http://localhost:8000
+make help                                 # every target
+```
+
+From this checkout, every Makefile target works on the bundled
+[`example/`](example/) instance. `make serve THEME=teal` previews the page with
+another theme.
 
 ## Layout
 
@@ -14,7 +34,7 @@ scripts/                      # the build: hydrate, gen-index, render-index, reg
   conf-overlay.sh             # workflow inputs layered over a committed config, as data
   dists-overlay.sh            # the dists/aliases/arches inputs over dists.conf (publish + pre-push check)
   check-mode.sh               # the workflow's input validation + mode decision
-  ci-build.sh                 # the build action's body: key import, overlays, make publish verify
+  ci-build.sh                 # the build action's body: key import, overlays, make publish verify-site
   push-ref.sh                 # the register action's body: register, check against the target, push
   setup-repo.sh               # Pages + github-pages environment policy through gh
   release.sh                  # engine release: pin, tag, move the major tag
@@ -23,11 +43,105 @@ template/index.html           # landing page; template/themes/*.css alternate co
 defaults/dists.conf           # releases published when an instance has no conf/dists.conf
 actions/build/                # composite: scripts/ci-build.sh
 actions/register/             # composite: scripts/push-ref.sh, with the token as an HTTP header
-.github/workflows/publish.yml # THE reusable workflow clients call
+.github/workflows/publish.yml # THE reusable workflow every repository calls
 .github/workflows/ci.yml      # the engine's own CI
 example/                      # a bundled instance: what the Makefile builds from this checkout
+docs/                         # user documentation: self mode, collection mode, reference
 tests/                        # shell tests: `make test`
 ```
+
+## Conventions
+
+- **Shell.** Scripts start with `#!/usr/bin/env bash` and `set -euo pipefail`.
+  Sourced libraries (`*-lib.sh`, `tests/helpers.sh`) carry
+  `# shellcheck shell=bash`, no `set`, and no executable bit. Output prefixes:
+  `✅` success, `❌` error (to stderr), `⚠️ ` warning, `>>` progress.
+- **Workflow inputs are data.** A `run:` step never interpolates
+  `${{ inputs.* }}`: inputs reach scripts through `env:` (see the `IN_*`
+  variables in `publish.yml`). `conf-overlay.sh` writes them `%q`-quoted, and
+  every `dists.conf` name is validated.
+- **Tokens** never appear in a URL, on a command line or in the log (see
+  [the register job](#the-reusable-workflow)).
+- **gpg** generates keys only with `--pinentry-mode loopback --passphrase ''` or
+  `%no-protection`, in scripts and tests alike. Anything else pops up a GUI
+  pinentry.
+- **Private keys are never committed.** `.gnupg-repo/` and `*.secret.asc` are
+  git-ignored. In CI, `GNUPGHOME` is a temporary directory outside the site and
+  the instance.
+- **The reference format is frozen within a major version.** Any change to
+  `schema/package.schema.json` that an older engine would reject, or that a
+  newer engine would read differently, needs a new major version.
+- **Action versions** are pinned to a major (`actions/checkout@v7`, …).
+  Dependabot proposes bumps weekly for `.github/workflows/` and `actions/*/`. A
+  bump changes what every caller runs, so it ships in an engine release, after
+  an acceptance run.
+
+## Tests
+
+`make test` runs every `tests/*_test.sh` with `bash`. Run one suite with
+`bash tests/<suite>_test.sh`.
+
+A suite:
+
+- sources `tests/helpers.sh`, which unsets `GITHUB_REPOSITORY` (so the suite
+  does not pick up the identity of the repository running it) and provides
+  `need`, `make_deb`, `make_test_key`, `make_expired_key` and `make_instance`;
+- starts with `need <tool>…`, which skips the whole suite when a tool is
+  missing;
+- works in a `mktemp -d` directory removed by a `trap`;
+- prints `❌ <what>` for each failed check, and ends with `PASS <suite>` (exit 0)
+  or `FAIL <suite>` (exit 1);
+- never touches the network: downloads use `file://` URLs or a fake `curl`, `gh`
+  is a fake passed through `$GH`, and git remotes are local bare repositories.
+
+| Suite | Covers |
+| --- | --- |
+| `dists`, `instance`, `overlay`, `dists_overlay` | config loading, path and identity resolution, input overlays |
+| `hydrate`, `owners`, `register`, `schema` | pool assembly, allowlist, reference generation, the format |
+| `gen_index`, `render`, `apt` | signing (multi-key, expired keys), page rendering and escaping, a real sandboxed apt |
+| `make` | the Makefile end to end: key → add → register → publish → verify-site → preview, rotation, example/ |
+| `push_ref`, `actions`, `check_mode` | register side: target checks, races, asset checks, token handling, mode rules |
+| `ci_build`, `setup_repo`, `release` | publish side, repository setup, engine releases |
+
+CI (`ci.yml`) runs on pull requests, on pushes to `main` and on `v*` tags:
+
+- `test`: `make test`
+- `lint`: `make lint`
+- `build-action`: `actions/build` end to end on `example/`, with a throwaway key,
+  then `make verify-site` and checks on the built site
+
+## Trying a change on GitHub
+
+Some behaviour only exists on GitHub: environment secrets in a reusable
+workflow, a token push triggering another repository's run, Pages deploys,
+`configure-pages`. To run a branch's engine from a throwaway public test
+repository, call the branch's workflow file and pin the engine to the same
+branch:
+
+```yaml
+    uses: andresbott/gh-action-debian-repo/.github/workflows/publish.yml@my-branch
+    with:
+      engine-ref: my-branch
+      # … the inputs under test
+```
+
+Without `engine-ref`, that workflow file would still check out the scripts of
+the release it is pinned to. The engine is checked out from
+`andresbott/gh-action-debian-repo`, so the branch must exist there. To test from
+a fork, point `repository:` in both engine checkouts of your branch's
+`publish.yml` at the fork.
+
+## Contributing
+
+1. Branch off `main`, and open a pull request against `main`. CI must pass.
+2. Every behaviour change comes with a test. For a bug, reproduce it in a test
+   first, then fix it.
+3. Commit subjects are one line, in Conventional Commits form: `feat:`, `fix:`,
+   `docs:`, `test:`, `chore:`.
+4. Keep the docs in step: user-facing behaviour in the README and `docs/`,
+   internals in this file.
+5. A branch that carries a release tag is merged with a merge commit, never
+   squashed or rebased, so the tag stays in `main`'s history.
 
 ## Engine and instance
 
@@ -99,52 +213,20 @@ instance.
    1. `apt-ftparchive` produces `Packages` for each codename and architecture,
       and a `Release` file carrying the branded `Origin`/`Label`/`Description`.
    2. The Release is signed as `InRelease` (clearsigned) and `Release.gpg`
-      (detached).
+      (detached) with **every usable secret key** in `GNUPGHOME`. Expired,
+      revoked and disabled keys are skipped, and `SIGNING_KEYS="<fpr> …"`
+      narrows the set.
    3. Each alias gets its own signed `dists/<alias>/` (`Suite=<alias>`,
       `Codename=<target>`), which reuses the target's `Packages` without a
       separate pool.
-   4. It exports the public keyring (`.gpg` + `.asc`), writes the `.sources`
-      file, and renders `index.html` (`scripts/render-index.sh`).
+   4. It exports the public keyring (`.gpg` + `.asc`) from the signing keys,
+      writes the `.sources` file, and renders `index.html`
+      (`scripts/render-index.sh`).
 
-`make verify` checks a built site the way apt does. Every suite's `InRelease`
+`make verify-site` checks a built site the way apt does. Every suite's `InRelease`
 must verify against the *published* keyring, and every pooled `.deb` must
 parse. `tests/apt_test.sh` goes further: an unprivileged, sandboxed `apt-get
 update` resolves packages through the site's own `.sources` file.
-
-### A different version per release
-
-A reference file has one `version`. An app that ships different versions to
-different releases registers each group into its own file. For example, it
-might build v6.5.3 for trixie because trixie's libraries cannot build v6.7.
-Each group goes in its own file, such as `file: packages/myapp.trixie.json`
-with `dist/trixie/`. All files are merged at publish time. The only rule is one
-(package, release, arch) across every file and `debs/`. Release assets share one
-flat namespace per tag, so each `.deb` needs a distinct file name.
-`register.sh` rejects duplicates. A `~<codename>` version suffix gives you that
-naturally. GitHub stores `~` in an asset name as `.`:
-`myapp_6.7.2-1~trixie_amd64.deb` is served as `myapp_6.7.2-1.trixie_amd64.deb`.
-`register.sh` builds each URL from that stored name, and checks for duplicates
-on it too (`a~b.deb` and `a.b.deb` are one asset).
-
-### The reference format
-
-```json
-{
-  "name": "myapp",
-  "version": "1.3.0",
-  "artifacts": [
-    { "release": "any", "arch": "amd64",
-      "url": "https://github.com/acme/myapp/releases/download/v1.3.0/myapp_1.3.0_amd64.deb",
-      "sha256": "<64 hex>" }
-  ]
-}
-```
-
-`schema/package.schema.json` is the contract between clients and instances, and
-it is **frozen within a major version**. Any change that an older engine would
-reject, or that a newer engine would read differently, needs a new major
-version. `version` is always read from the `.deb`, never from the tag: a tag
-need not be a version, and a packaging suffix exists only in the `.deb`.
 
 ## The reusable workflow
 
@@ -157,11 +239,16 @@ problem at once as annotations, and picks the mode:
 | `name` + `artifact` | self | `register` → `publish` |
 | `name` + `artifact` + `collection` | collection | `register` |
 
-In collection mode the build inputs (`dists`, `aliases`, `arches`, `repo-name`,
-`site-title`, `site-tagline`, `theme`) are rejected: the collection's own
-`conf/` decides them, so they would be silently ignored. For the same reason
-`instance-ref` and `instance-path` are rejected whenever `name` is set: they
-only pick the instance a publish-only run builds.
+These are the workflow's internal modes, not three setups. A self-mode
+repository makes one self run per release. A collection needs a collection run in
+each client plus the collection's own publish-only run, which the client's push
+triggers. A publish-only run also re-publishes a self-mode repository.
+
+In a collection-mode call (a client's) the build inputs (`dists`, `aliases`,
+`arches`, `repo-name`, `site-title`, `site-tagline`, `theme`) are rejected: the
+collection's own `conf/` decides them, so they would be silently ignored. For
+the same reason `instance-ref` and `instance-path` are rejected whenever `name`
+is set: they only pick the instance a publish-only run builds.
 
 **`register`**:
 
@@ -194,9 +281,9 @@ config, and its base64 form is masked.
 
 **`publish`** runs in the `github-pages` environment.
 
-- It is skipped in collection mode; the collection's own push-triggered run
-  deploys instead. An App token or PAT push does trigger workflows, and a
-  `github.token` push does not.
+- It is skipped in collection mode; the collection's own push-triggered
+  publish-only run deploys instead. An App token or PAT push does trigger
+  workflows, and a `github.token` push does not.
 - Steps:
   1. Checks out the instance: the `self-branch`, or `instance-ref`.
   2. Checks out the engine.
@@ -207,7 +294,7 @@ config, and its base64 form is masked.
        (a protected key fails here, not halfway through signing)
      - writes the input overlays to temporary `SITE_CONF`/`DISTS_CONF` files,
        leaving the committed files untouched
-     - runs `make publish verify`
+     - runs `make publish verify-site`
      - removes the keyring
   5. Runs `upload-pages-artifact` and then `deploy-pages`.
 - One deploy per repository runs at a time. A newer queued run supersedes an
@@ -216,7 +303,7 @@ config, and its base64 form is masked.
 
 **No `permissions:` block** is set inside the workflow. A called workflow can
 only narrow the caller's permissions, and the modes need different ones, so
-callers grant them (see the README).
+callers grant them (see the [reference](docs/reference.md#the-workflow)).
 
 **Environment secrets.** `APT_SIGNING_KEY` normally lives in the caller's
 `github-pages` environment. Only the `publish` job, which declares that
@@ -228,41 +315,6 @@ plus the given tag patterns.
 That file checks the engine out at `${{ inputs.engine-ref || 'vX.Y.Z' }}`,
 which `scripts/release.sh` rewrites for every release. The workflow and the
 scripts therefore always come from the same release.
-
-## Signing and key rotation
-
-`gen-index.sh` signs with **every usable secret key** in `GNUPGHOME`. Expired,
-revoked and disabled keys are skipped. `SIGNING_KEYS="<fpr> …"` narrows the set.
-The published keyring contains every signing key.
-
-Locally, the keyring lives in `$(INSTANCE)/.gnupg-repo/` unless `GNUPGHOME` is
-set. `make key` writes a `.gitignore` of `*` into the keyring directory, so git
-never offers it for a commit, wherever `GNUPGHOME` points. In CI it is a
-temporary directory. It is never inside the site.
-
-apt accepts a signature from any key it trusts, even when other signatures on
-the file are unknown to it. Rotation relies on that:
-
-1. **Add**: run `make key ROTATE=1`, then `make key-to-repo REPO=…`, then publish.
-   Both keys now sign, and the published keyring holds both. Old clients keep
-   working. Tell users to re-download the keyring.
-2. **Retire**: once clients have the new keyring, run
-   `gpg --delete-secret-keys <old fpr>`, then `make key-to-repo`, then publish.
-   Clients that never re-downloaded the keyring stop verifying at this point.
-   apt has no key-update channel, so plan phase 1 long enough.
-
-In self mode, "publish" without a new release means calling the workflow in
-publish-only mode with `instance-ref: apt` and the release workflow's build
-inputs (see the README). A publish-only run without `instance-ref` builds the
-branch it runs on, which holds no references, and deploys an empty repository.
-
-`make key-to-repo` first prints the fingerprint and uid of every secret key it
-is about to upload, so you can check that a retired key is really gone.
-
-`make backup-key` writes `$(GNUPGHOME)/signing-key.secret.asc` (mode 600). It
-sits inside the keyring directory, so it is private and git-ignored along with
-it. Move it into a vault, then `shred -u` it. To restore, run `gpg --import`
-into `GNUPGHOME`, then `make key-to-repo`.
 
 ## Security model
 
@@ -278,38 +330,10 @@ into `GNUPGHOME`, then `make key-to-repo`.
   target would reject. The build re-checks everything anyway, so a hand-edited
   reference is caught before download. These checks stop honest mistakes, not a
   malicious client: every client holds the App key (or the collection token),
-  which is `contents: write` on the whole collection, so it could edit
-  `conf/owners.conf` or `conf/index.html` directly. For a hard boundary, add a
-  push ruleset to the collection that blocks changes outside `packages/**`, with
-  only the maintainers allowed to bypass it.
+  which is `contents: write` on the whole collection. See
+  [the trust model](docs/collection-mode.md#the-trust-model).
 - **Tokens**: App tokens are scoped to the one collection repository. Tokens
   never reach a URL, a command line or the log.
-
-## Tests
-
-`make test` runs every `tests/*_test.sh` and takes about a minute.
-
-- **Needs**: `bash`, `make`, `git`, `gpg`/`gpgv`, `dpkg-deb`, `apt-ftparchive`
-  (`apt-utils`), `apt-get`, `jq`, `python3` with `yaml`, and `check-jsonschema`,
-  `uvx` or `pipx`.
-- **No network**: downloads use `file://` URLs or a fake `curl`, and `gh` is
-  faked.
-
-| Suite | Covers |
-| --- | --- |
-| `dists`, `instance`, `overlay`, `dists_overlay` | config loading, path and identity resolution, input overlays |
-| `hydrate`, `owners`, `register`, `schema` | pool assembly, allowlist, reference generation, the format |
-| `gen_index`, `render`, `apt` | signing (multi-key, expired keys), page rendering and escaping, a real sandboxed apt |
-| `make` | the Makefile end to end: key → add → register → publish → verify → preview, rotation, example/ |
-| `push_ref`, `actions`, `check_mode` | register side: target checks, races, asset checks, token handling, mode rules |
-| `ci_build`, `setup_repo`, `release` | publish side, repository setup, engine releases |
-
-`make lint` runs actionlint, including shellcheck on `run:` blocks, through
-docker. CI (`ci.yml`) runs:
-
-- `make test`
-- `make lint`
-- `actions/build` end to end on `example/`, with a throwaway key and `make verify`
 
 ## Releasing the engine
 
@@ -317,21 +341,22 @@ docker. CI (`ci.yml`) runs:
 make release VERSION=v1.0.0-rc.1   # pin + commit + tag; prints the push commands, never pushes
 ```
 
-1. **rc**: tag `vX.Y.Z-rc.N` and push it. Then run the acceptance checks:
-   - A self-mode test repository calls `publish.yml@vX.Y.Z-rc.N`, tags a
-     release, and `apt install`s the package from its Pages.
-   - A collection test repository plus one client does the same through the
+`scripts/release.sh` needs a clean tree. It rewrites both engine pins in
+`publish.yml` to the version, commits `release <version>`, and tags it. For a
+final release it also moves the major tag (`v1`) locally.
+
+1. **rc**: `make release VERSION=vX.Y.Z-rc.N`, then push the branch and the tag.
+   Run the acceptance checks against `publish.yml@vX.Y.Z-rc.N`, on throwaway
+   public repositories:
+   - A self-mode repository tags a release, and the package `apt install`s from
+     its Pages in a clean container.
+   - A collection plus one client (with a GitHub App) do the same through the
      collection, including an `owners.conf` rejection.
-2. **final**: `make release VERSION=vX.Y.Z` also moves the major tag (`v1`).
-   Push it with `git push --force origin v1`.
+
+   A failure gets a test and a fix, then the next `rc.N`.
+2. **final**: `make release VERSION=vX.Y.Z` also moves `v1`. Push the tag, then
+   `git push --force origin v1`. Check `@v1` end to end with one more self-mode
+   release.
 
 Release candidates never move the major tag, so `@v1` users only ever get final
 releases.
-
-## Limits
-
-- GitHub Pages sites are limited to 1 GB, and every `.deb` of every release is
-  in the site.
-- Release assets must be public, because the publish downloads them
-  anonymously. A private app repository needs `debs/` instead.
-- Pages for private repositories need a paid plan.

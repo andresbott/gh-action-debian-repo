@@ -17,7 +17,7 @@
 #   2. Manual:    `make add DEB=foo.deb` stages a binary into debs/, which you
 #      commit. Both are merged into the published pool.
 #
-# Local dry-run of the whole CI publish:  make publish verify serve
+# Local dry-run of the whole CI publish:  make publish verify-site serve
 
 ENGINE := $(patsubst %/,%,$(dir $(abspath $(lastword $(MAKEFILE_LIST)))))
 ifeq ($(abspath $(CURDIR)),$(ENGINE))
@@ -84,10 +84,10 @@ hydrate: ## assemble $(SITE)/pool from packages/*.json (download + verify) and d
 .PHONY: build
 build: require-key ## generate + GPG-sign the index in $(SITE) from the pool
 	@THEME="$(THEME)" $(SCRIPTS)/gen-index.sh "$(SITE)"
-	@echo ">> tip: 'make verify serve' to check it locally"
+	@echo ">> tip: 'make verify-site serve' to check it locally"
 
-.PHONY: verify
-verify: ## check a built site as apt would: every suite verifies against the published keyring, pooled debs parse
+.PHONY: verify-site
+verify-site: ## check a built site as apt would: every suite verifies against the published keyring, pooled debs parse
 	@kr="$(SITE)/$$($(INFO) KEYRING_FILE)"; ok=1; \
 	 [ -f "$$kr" ] || { echo "❌ no published keyring $$kr (run 'make publish')"; exit 1; }; \
 	 for s in $$($(INFO) SUITES); do \
@@ -231,6 +231,9 @@ test: ## run the engine's shell tests
 .PHONY: lint
 lint: ## lint the workflows (actionlint, through docker)
 	@docker run --rm -v "$(ENGINE):/repo" -w /repo rhysd/actionlint:latest -color
+
+.PHONY: verify
+verify: test lint ## check code changes before a push: the tests, then the lint
 
 .PHONY: release
 release: ## tag an engine release (pins the workflow's engine-ref; never pushes): make release VERSION=v1.2.3

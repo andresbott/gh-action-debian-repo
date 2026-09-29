@@ -10,6 +10,10 @@
 #   publish-only  (neither)                    rebuild and deploy this repository's
 #                                              instance (a collection's own workflow)
 #
+# Two setups use these: a self-mode repository makes one self run per release; a
+# collection is a collection run in each client plus the collection's own
+# publish-only run. publish-only also re-publishes a self-mode repository.
+#
 # No `permissions:` here: the caller grants what its mode needs —
 #   self: contents: write, pages: write, id-token: write
 #   collection: contents: read
@@ -38,7 +42,7 @@ on:
         type: string
         default: ''
       collection:
-        description: owner/name of a shared collection repository. Empty = this repository (self mode).
+        description: owner/name of the collection a client pushes its reference to. Empty = this repository.
         type: string
         default: ''
       collection-branch:
@@ -120,7 +124,7 @@ jobs:
       branch: ${{ steps.mode.outputs.branch }}
     steps:
       - name: Check out the engine
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: andresbott/gh-action-debian-repo
           # rewritten by scripts/release.sh: each release runs its own scripts
@@ -153,16 +157,17 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
         run: ./.debrepo-engine/scripts/check-mode.sh
       - name: Download the .debs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ inputs.artifact }}
           path: ${{ runner.temp }}/debrepo-dist
       - name: Mint a collection token
         id: app
         if: inputs.app-id != ''
-        uses: actions/create-github-app-token@v2
+        uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ inputs.app-id }}
+          # v3 takes the App ID or the Client ID here (its own app-id is deprecated)
+          client-id: ${{ inputs.app-id }}
           private-key: ${{ secrets.app-private-key }}
           owner: ${{ steps.mode.outputs.target-owner }}
           repositories: ${{ steps.mode.outputs.target-name }}
@@ -203,13 +208,13 @@ jobs:
       page-url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - name: Check out the instance
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           ref: ${{ needs.register.outputs.branch || inputs.instance-ref }}
           path: instance
           persist-credentials: false
       - name: Check out the engine
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
         with:
           repository: andresbott/gh-action-debian-repo
           # rewritten by scripts/release.sh: each release runs its own scripts
@@ -218,7 +223,7 @@ jobs:
           persist-credentials: false
       - name: Configure Pages
         id: pages
-        uses: actions/configure-pages@v5
+        uses: actions/configure-pages@v6
       - name: Build and sign
         id: build
         uses: ./.debrepo-engine/actions/build
@@ -234,9 +239,9 @@ jobs:
           site-tagline: ${{ inputs.site-tagline }}
           theme: ${{ inputs.theme }}
       - name: Upload the site
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v5
         with:
           path: ${{ steps.build.outputs.site }}
       - name: Deploy
         id: deploy
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5
