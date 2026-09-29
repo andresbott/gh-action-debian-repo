@@ -7,7 +7,7 @@ several Debian and Ubuntu releases at once, from a release workflow.
   - **[Self mode](docs/self-mode.md)**: a project publishes its own repository on its own Pages.
   - **[Collection mode](docs/collection-mode.md)**: many projects publish into one shared repository. Each project's release pushes its reference there, and the shared repository deploys itself.
 - Stateless. Every publish rebuilds the whole repository from checksummed references to your GitHub release assets, plus any `.deb`s committed to it. Each release gets a pool and a signed index, rolling aliases (`stable`, `testing`, …) sit on top, and a landing page shows the install instructions.
-- The same engine runs locally: `make publish verify serve` gives you the exact CI build at `http://localhost:8000`.
+- The same engine runs locally: `make publish verify-site serve` gives you the exact CI build at `http://localhost:8000`.
 
 ## How it works
 

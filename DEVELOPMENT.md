@@ -11,10 +11,11 @@ You need `bash`, `make`, `git`, `gpg`/`gpgv`, `dpkg-deb`, `apt-ftparchive`
 `check-jsonschema`, `uvx` or `pipx`, and `docker` for `make lint`.
 
 ```bash
+make verify                               # before a push: make test, then make lint
 make test                                 # every test suite, about a minute
 make lint                                 # actionlint + shellcheck, through docker
 make key KEY_EMAIL=you@example.org        # once: a local key for the example, in example/.gnupg-repo (git-ignored)
-make example-debs publish verify serve    # sample packages, the full CI build, apt's checks, http://localhost:8000
+make example-debs publish verify-site serve  # sample packages, the full CI build, apt's checks, http://localhost:8000
 make help                                 # every target
 ```
 
@@ -33,7 +34,7 @@ scripts/                      # the build: hydrate, gen-index, render-index, reg
   conf-overlay.sh             # workflow inputs layered over a committed config, as data
   dists-overlay.sh            # the dists/aliases/arches inputs over dists.conf (publish + pre-push check)
   check-mode.sh               # the workflow's input validation + mode decision
-  ci-build.sh                 # the build action's body: key import, overlays, make publish verify
+  ci-build.sh                 # the build action's body: key import, overlays, make publish verify-site
   push-ref.sh                 # the register action's body: register, check against the target, push
   setup-repo.sh               # Pages + github-pages environment policy through gh
   release.sh                  # engine release: pin, tag, move the major tag
@@ -98,7 +99,7 @@ A suite:
 | `dists`, `instance`, `overlay`, `dists_overlay` | config loading, path and identity resolution, input overlays |
 | `hydrate`, `owners`, `register`, `schema` | pool assembly, allowlist, reference generation, the format |
 | `gen_index`, `render`, `apt` | signing (multi-key, expired keys), page rendering and escaping, a real sandboxed apt |
-| `make` | the Makefile end to end: key → add → register → publish → verify → preview, rotation, example/ |
+| `make` | the Makefile end to end: key → add → register → publish → verify-site → preview, rotation, example/ |
 | `push_ref`, `actions`, `check_mode` | register side: target checks, races, asset checks, token handling, mode rules |
 | `ci_build`, `setup_repo`, `release` | publish side, repository setup, engine releases |
 
@@ -107,7 +108,7 @@ CI (`ci.yml`) runs on pull requests, on pushes to `main` and on `v*` tags:
 - `test`: `make test`
 - `lint`: `make lint`
 - `build-action`: `actions/build` end to end on `example/`, with a throwaway key,
-  then `make verify` and checks on the built site
+  then `make verify-site` and checks on the built site
 
 ## Trying a change on GitHub
 
@@ -222,7 +223,7 @@ instance.
       writes the `.sources` file, and renders `index.html`
       (`scripts/render-index.sh`).
 
-`make verify` checks a built site the way apt does. Every suite's `InRelease`
+`make verify-site` checks a built site the way apt does. Every suite's `InRelease`
 must verify against the *published* keyring, and every pooled `.deb` must
 parse. `tests/apt_test.sh` goes further: an unprivileged, sandboxed `apt-get
 update` resolves packages through the site's own `.sources` file.
@@ -293,7 +294,7 @@ config, and its base64 form is masked.
        (a protected key fails here, not halfway through signing)
      - writes the input overlays to temporary `SITE_CONF`/`DISTS_CONF` files,
        leaving the committed files untouched
-     - runs `make publish verify`
+     - runs `make publish verify-site`
      - removes the keyring
   5. Runs `upload-pages-artifact` and then `deploy-pages`.
 - One deploy per repository runs at a time. A newer queued run supersedes an

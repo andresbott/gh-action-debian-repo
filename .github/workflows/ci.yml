@@ -54,7 +54,7 @@ jobs:
           base-url: https://example.github.io/example-debs
           site-title: CI build
       - name: Verify
-        run: make verify SITE="${{ steps.build.outputs.site }}"
+        run: make verify-site SITE="${{ steps.build.outputs.site }}"
       - name: The site is what apt and the page expect
         env:
           SITE: ${{ steps.build.outputs.site }}

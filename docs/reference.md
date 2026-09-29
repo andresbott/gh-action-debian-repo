@@ -220,7 +220,7 @@ self-mode instance is a checkout of the `apt` branch.
 | Target | Does |
 | --- | --- |
 | `publish` | the full CI build into `_site/`: validate, download and verify, sign |
-| `verify` | check the built site as apt would: every suite against the published keyring, every pooled `.deb` parses |
+| `verify-site` | check the built site as apt would: every suite against the published keyring, every pooled `.deb` parses |
 | `serve` | preview the site at `http://localhost:8000`, or a demo page when there are no packages |
 | `add DEB=… [RELEASE=…]` | copy a `.deb` into `debs/` (or `debs/<RELEASE>/`) to commit it |
 | `register NAME=… REPO=… TAG=… [DIST=…] [FILE=…]` | write a reference from built `.deb`s by hand |
