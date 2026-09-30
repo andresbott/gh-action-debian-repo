@@ -40,4 +40,4 @@ policy(){ # <type> <pattern>
 policy branch "$("$GH" api -X GET "repos/$REPO" --jq .default_branch)"
 read -ra tags <<< "$TAGS"   # word-split without globbing: v* stays v*
 for t in "${tags[@]}"; do policy tag "$t"; done
-echo ">> next: make key-to-repo REPO=$REPO   (stores APT_SIGNING_KEY in the github-pages environment)"
+echo ">> next: make key-to-repo REPO=$REPO   (stores the APT_SIGNING_KEY repository secret)"

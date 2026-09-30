@@ -42,9 +42,10 @@ elif [ "${EPHEMERAL_KEY:-}" = 1 ]; then
   gpg --batch --pinentry-mode loopback --passphrase '' \
     --quick-generate-key "ephemeral <ephemeral@localhost>" default sign never 2>/dev/null
 else
-  echo "❌ no APT_SIGNING_KEY secret. Create a key with 'make key' and store it with" >&2
-  echo "   'make key-to-repo REPO=<owner/name>' (github-pages environment), and pass it to" >&2
-  echo "   the workflow: 'secrets: inherit' or 'secrets: { APT_SIGNING_KEY: ... }'" >&2
+  echo "❌ no APT_SIGNING_KEY secret. Create a key with 'make key', store it with" >&2
+  echo "   'make key-to-repo REPO=<owner/name>' (a repository secret), and pass it to the" >&2
+  echo "   workflow by name: 'secrets: { APT_SIGNING_KEY: \${{ secrets.APT_SIGNING_KEY }} }'." >&2
+  echo "   'secrets: inherit' passes nothing to a workflow owned by another account." >&2
   exit 1
 fi
 

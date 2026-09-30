@@ -59,6 +59,20 @@ m clean >/dev/null; [ ! -d "$inst/_site" ] && ok "make clean" || bad "make clean
 m preview >/dev/null 2>&1 && grep -q 'Demo preview' "$inst/.cache/preview/index.html" \
   && ok "preview of an empty repo renders the demo" || bad "demo preview"
 
+# clean-key lists by default, deletes with CONFIRM=1, and only ever a keyring
+out="$(m clean-key 2>&1)" && [ -d "$inst/.gnupg-repo" ] && printf '%s' "$out" | grep -q 'new@example.org' \
+  && ok "clean-key without CONFIRM lists the keys and deletes nothing" || bad "clean-key dry run: $out"
+m clean-key CONFIRM=1 GNUPGHOME="$inst" >/dev/null 2>&1 || [ ! -d "$inst/.git" ] \
+  && bad "clean-key deleted a directory holding more than a keyring" || ok "clean-key refuses a directory that is not only a keyring"
+mkdir -p "$tmp/home/.gnupg"; HOME="$tmp/home" m clean-key CONFIRM=1 GNUPGHOME="$tmp/home/.gnupg" >/dev/null 2>&1 || [ ! -d "$tmp/home/.gnupg" ] \
+  && bad "clean-key deleted ~/.gnupg" || ok "clean-key refuses ~/.gnupg"
+touch "$inst/.gnupg-repo/.signing-key.secret.asc.kate-swp" "$inst/.gnupg-repo/signing-key.secret.asc~"   # editor copies of the backup
+out="$(m clean-key 2>&1)"; printf '%s' "$out" | grep -q 'key backup .signing-key.secret.asc.kate-swp' \
+  && ok "clean-key lists editor copies of the backup" || bad "clean-key listing of editor copies: $out"
+m clean-key CONFIRM=1 >/dev/null 2>&1 && [ ! -e "$inst/.gnupg-repo" ] && ok "clean-key CONFIRM=1 deletes the keyring and the backup's editor copies" || bad "clean-key CONFIRM=1"
+out="$(m clean-key 2>&1)"; printf '%s' "$out" | grep -q 'nothing to delete' \
+  && ok "clean-key without a keyring does nothing" || bad "clean-key without a keyring: $out"
+
 # validate: package files are read from PKG_DIR, as hydrate reads them; with no
 # schema validator at all (scripts/jsonschema.sh exit 127) it warns and passes
 val="$tmp/val"; mkdir -p "$val/conf" "$val/packages" "$tmp/pk"; cp "$tmp/d.conf" "$val/conf/dists.conf"

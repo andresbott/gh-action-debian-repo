@@ -37,7 +37,7 @@ scripts/                      # the build: hydrate, gen-index, render-index, reg
   ci-build.sh                 # the build action's body: key import, overlays, make publish verify-site
   push-ref.sh                 # the register action's body: register, check against the target, push
   setup-repo.sh               # Pages + github-pages environment policy through gh
-  release.sh                  # engine release: pin, tag, move the major tag
+  release.sh                  # engine release (make tag): pin, tag, move the major tag, push
 schema/package.schema.json    # the packages/*.json reference format (frozen per major version)
 template/index.html           # landing page; template/themes/*.css alternate colour themes
 defaults/dists.conf           # releases published when an instance has no conf/dists.conf
@@ -112,9 +112,11 @@ CI (`ci.yml`) runs on pull requests, on pushes to `main` and on `v*` tags:
 
 ## Trying a change on GitHub
 
-Some behaviour only exists on GitHub: environment secrets in a reusable
-workflow, a token push triggering another repository's run, Pages deploys,
-`configure-pages`. To run a branch's engine from a throwaway public test
+Some behaviour only exists on GitHub: how secrets reach a reusable workflow, a
+token push triggering another repository's run, Pages deploys,
+`configure-pages`. Secrets behave differently when the caller and the engine
+share an owner, so put at least one test repository under another account or
+organization. To run a branch's engine from a throwaway public test
 repository, call the branch's workflow file and pin the engine to the same
 branch:
 
@@ -305,11 +307,12 @@ config, and its base64 form is masked.
 only narrow the caller's permissions, and the modes need different ones, so
 callers grant them (see the [reference](docs/reference.md#the-workflow)).
 
-**Environment secrets.** `APT_SIGNING_KEY` normally lives in the caller's
-`github-pages` environment. Only the `publish` job, which declares that
-environment, can read it. The environment's deployment policy decides which
-refs may deploy (and so sign). `make setup-repo` allows the default branch
-plus the given tag patterns.
+**Secrets.** Callers pass `APT_SIGNING_KEY` by name, from a repository secret.
+A caller owned by another account than the engine gets nothing through
+`secrets: inherit`. Its environment secrets never reach the `publish` job
+either, even though that job declares the `github-pages` environment. The
+environment's deployment policy still decides which refs may deploy (and so
+sign). `make setup-repo` allows the default branch plus the given tag patterns.
 
 **Engine pinning.** A caller picks the workflow file with `@v1` or `@v1.2.3`.
 That file checks the engine out at `${{ inputs.engine-ref || 'vX.Y.Z' }}`,
@@ -318,8 +321,10 @@ scripts therefore always come from the same release.
 
 ## Security model
 
-- **The signing key** exists only in the environment secret, and only during
-  the `publish` job. Collection clients never see it.
+- **The signing key** lives in the deploying repository's `APT_SIGNING_KEY`
+  secret. In CI it exists only during the `publish` job, and collection clients
+  are never handed it. A client that can push `conf/` can still run code in that
+  job: see [the trust model](docs/collection-mode.md#the-trust-model).
 - **Workflow inputs are data.** `conf-overlay.sh` writes them `%q`-quoted, and
   `dists.conf` names are validated.
 - **The landing page** escapes every value from `site.conf` and every package
@@ -338,14 +343,20 @@ scripts therefore always come from the same release.
 ## Releasing the engine
 
 ```bash
-make release VERSION=v1.0.0-rc.1   # pin + commit + tag; prints the push commands, never pushes
+make tag VERSION=v1.0.0-rc.1   # pin + commit + tag, then push the branch and the tag
 ```
 
-`scripts/release.sh` needs a clean tree. It rewrites both engine pins in
-`publish.yml` to the version, commits `release <version>`, and tags it. For a
-final release it also moves the major tag (`v1`) locally.
+`scripts/release.sh` needs a clean tree on a branch that is not behind
+`origin`. The version must be `vX.Y.Z` or `vX.Y.Z-rc.N` with no leading zeros.
+It must not be tagged yet, locally or on `origin`, and it must be newer than
+every release of its major line. So `@v1` never moves backwards, and an rc can't
+follow its final. The script rewrites both engine pins in `publish.yml` to the
+version, commits `release <version>`, and tags it. For a final release it also
+moves the major tag (`v1`). It then pushes the branch and the tags to `origin`
+in one atomic push. If that push fails, the release stays tagged locally and
+the script prints the command to retry.
 
-1. **rc**: `make release VERSION=vX.Y.Z-rc.N`, then push the branch and the tag.
+1. **rc**: `make tag VERSION=vX.Y.Z-rc.N`.
    Run the acceptance checks against `publish.yml@vX.Y.Z-rc.N`, on throwaway
    public repositories:
    - A self-mode repository tags a release, and the package `apt install`s from
@@ -354,9 +365,8 @@ final release it also moves the major tag (`v1`) locally.
      collection, including an `owners.conf` rejection.
 
    A failure gets a test and a fix, then the next `rc.N`.
-2. **final**: `make release VERSION=vX.Y.Z` also moves `v1`. Push the tag, then
-   `git push --force origin v1`. Check `@v1` end to end with one more self-mode
-   release.
+2. **final**: `make tag VERSION=vX.Y.Z` also moves `v1` and force-pushes it.
+   Check `@v1` end to end with one more self-mode release.
 
 Release candidates never move the major tag, so `@v1` users only ever get final
 releases.

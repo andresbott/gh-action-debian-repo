@@ -47,7 +47,8 @@ the `.deb`s as the `debs` artifact:
     with:
       name: myapp                                # the .debs' Package field
       artifact: debs
-    secrets: inherit
+    secrets:
+      APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
 ```
 
 The repository also needs a signing key and GitHub Pages, set up once: see

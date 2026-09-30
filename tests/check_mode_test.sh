@@ -15,16 +15,16 @@ is(){ local want="$1" desc="$2"; shift 2; local got; got="$(cm "$@")"
 rejects(){ local msg="$1" desc="$2"; shift 2; local got; got="$(cm "$@")"
       [ "${got%% *}" = 1 ] && grep -q -- "$msg" "$tmp/log" && ok "$desc" || bad "$desc: got '$got' ($(cat "$tmp/log"))"; }
 
-is "0 mode=publish-only tag= branch= target= target-owner= target-name= " "no inputs -> publish-only"
-is "0 mode=self tag=v1.2 branch=apt target=acme/myapp target-owner=acme target-name=myapp " "name + artifact on a tag -> self, branch apt" \
+is "0 mode=publish-only tag= branch= target= target-owner= target-name= use-app=false " "no inputs -> publish-only"
+is "0 mode=self tag=v1.2 branch=apt target=acme/myapp target-owner=acme target-name=myapp use-app=false " "name + artifact on a tag -> self, branch apt" \
    IN_NAME=myapp IN_ARTIFACT=debs REF_TYPE=tag REF_NAME=v1.2
-is "0 mode=self tag=v9 branch=gh-apt target=acme/myapp target-owner=acme target-name=myapp " "tag and self-branch inputs win" \
+is "0 mode=self tag=v9 branch=gh-apt target=acme/myapp target-owner=acme target-name=myapp use-app=false " "tag and self-branch inputs win" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v9 IN_SELF_BRANCH=gh-apt REF_TYPE=branch REF_NAME=main
-is "0 mode=collection tag=v1.2 branch=main target=acme/apt target-owner=acme target-name=apt " "collection + app -> collection, branch main" \
+is "0 mode=collection tag=v1.2 branch=main target=acme/apt target-owner=acme target-name=apt use-app=true " "collection + app -> collection, branch main, token from the App" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_COLLECTION=acme/apt IN_APP_ID=123 HAS_APP_KEY=true REF_TYPE=tag REF_NAME=v1.2
-is "0 mode=collection tag=v1.2 branch=pages target=acme/apt target-owner=acme target-name=apt " "collection + token, collection-branch" \
+is "0 mode=collection tag=v1.2 branch=pages target=acme/apt target-owner=acme target-name=apt use-app=false " "collection + token, collection-branch" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_COLLECTION=acme/apt IN_COLLECTION_BRANCH=pages HAS_COLLECTION_TOKEN=true REF_TYPE=tag REF_NAME=v1.2
-is "0 mode=self tag=v1 branch=apt target=acme/myapp target-owner=acme target-name=myapp " "build inputs allowed in self mode" \
+is "0 mode=self tag=v1 branch=apt target=acme/myapp target-owner=acme target-name=myapp use-app=false " "build inputs allowed in self mode" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_DISTS=trixie IN_THEME=teal
 
 rejects "needs 'name'" "collection without name" IN_COLLECTION=acme/apt
@@ -48,9 +48,9 @@ rejects "input 'instance-path' only applies to publish-only" "instance-path in s
    IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_INSTANCE_PATH=sub
 rejects "input 'instance-ref' only applies to publish-only" "instance-ref in collection mode" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_COLLECTION=acme/apt HAS_COLLECTION_TOKEN=true IN_INSTANCE_REF=main
-is "0 mode=self tag=v1 branch=apt target=acme/myapp target-owner=acme target-name=myapp " "instance-path '.' (the default) allowed with name" \
+is "0 mode=self tag=v1 branch=apt target=acme/myapp target-owner=acme target-name=myapp use-app=false " "instance-path '.' (the default) allowed with name" \
    IN_NAME=myapp IN_ARTIFACT=debs IN_TAG=v1 IN_INSTANCE_PATH=.
-is "0 mode=publish-only tag= branch= target= target-owner= target-name= " "instance-ref/instance-path allowed in publish-only" \
+is "0 mode=publish-only tag= branch= target= target-owner= target-name= use-app=false " "instance-ref/instance-path allowed in publish-only" \
    IN_INSTANCE_REF=apt IN_INSTANCE_PATH=sub
 cm IN_NAME=MyApp IN_COLLECTION=x >/dev/null; [ "$(grep -c '❌' "$tmp/log")" -ge 3 ] && ok "all problems reported at once" || bad "errors: $(cat "$tmp/log")"
 [ ! -s "$tmp/out" ] && ok "no outputs on rejection" || bad "outputs written on rejection"

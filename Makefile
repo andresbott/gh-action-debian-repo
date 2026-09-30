@@ -48,6 +48,9 @@ export GNUPGHOME
 # .gitignore into it, so neither the private key nor the backup written next to
 # it can be committed — wherever GNUPGHOME points, whatever the instance ignores.
 KEYRING_IGNORE = [ -e "$(GNUPGHOME)/.gitignore" ] || printf '%s\n' '*' > "$(GNUPGHOME)/.gitignore"
+# "   <fingerprint>  <uid>" for every secret key in the keyring
+LIST_SECRET_KEYS = gpg --batch --list-secret-keys --with-colons 2>/dev/null | awk -F: '$$1=="sec"{p=1; next} \
+  p&&$$1=="fpr"{fpr=$$10; p=0; next} $$1=="ssb"{fpr=""} $$1=="uid"&&fpr!=""{print "   " fpr "  " $$10}'
 
 # `preview` renders into, and `serve` serves, the built site when it has
 # packages — else a demo page in .cache/preview, so an empty repository's design
@@ -87,7 +90,7 @@ build: require-key ## generate + GPG-sign the index in $(SITE) from the pool
 	@echo ">> tip: 'make verify-site serve' to check it locally"
 
 .PHONY: verify-site
-verify-site: ## check a built site as apt would: every suite verifies against the published keyring, pooled debs parse
+verify-site: ## check a built site as apt would: signatures vs the keyring, debs parse
 	@kr="$(SITE)/$$($(INFO) KEYRING_FILE)"; ok=1; \
 	 [ -f "$$kr" ] || { echo "❌ no published keyring $$kr (run 'make publish')"; exit 1; }; \
 	 for s in $$($(INFO) SUITES); do \
@@ -99,7 +102,7 @@ verify-site: ## check a built site as apt would: every suite verifies against th
 	 [ $$ok -eq 1 ]
 
 .PHONY: add
-add: ## stage a local .deb into debs/ (or debs/<RELEASE>/) for git-committed hosting: make add DEB=path/to.deb [RELEASE=trixie]
+add: ## stage a .deb into debs/[<RELEASE>/] to commit: DEB=path/to.deb [RELEASE=]
 	@[ "$(DEB)" ] || { echo ">> usage: make add DEB=path/to/pkg.deb [RELEASE=<codename>]"; exit 1; }
 	@[ -f "$(DEB)" ] || { echo "❌ no such file: $(DEB)"; exit 1; }
 	@dpkg-deb --info "$(DEB)" >/dev/null 2>&1 || { echo "❌ not a valid .deb: $(DEB)"; exit 1; }
@@ -109,6 +112,8 @@ add: ## stage a local .deb into debs/ (or debs/<RELEASE>/) for git-committed hos
 	 echo "✅ staged $$dest/$$(basename "$(DEB)")  ($$(dpkg-deb -f "$(DEB)" Package) $$(dpkg-deb -f "$(DEB)" Version) $$(dpkg-deb -f "$(DEB)" Architecture))"; \
 	 echo ">> commit it; the next publish includes it"
 
+# DIST holds the built debs: flat *.deb publish to every release ("any"),
+# <release>/*.deb to that release only.
 # FILE overrides the default packages/<name>.json. One file holds one version, so
 # an app whose suites ship different versions registers each group separately:
 #   make register NAME=myapp ... DIST=dist/trixie-only FILE=packages/myapp.trixie.json
@@ -117,7 +122,7 @@ add: ## stage a local .deb into debs/ (or debs/<RELEASE>/) for git-committed hos
 REGISTER_OUT = $(if $(FILE),$(FILE),packages/$(NAME).json)
 
 .PHONY: register
-register: ## write a packages/*.json from built debs (DIST: flat *.deb = "any", or <release>/*.deb): make register NAME=app REPO=owner/app TAG=vX.Y.Z [DIST=dist] [FILE=packages/app.trixie.json]
+register: ## write packages/*.json from built debs: NAME=app REPO=owner/app TAG=vX.Y.Z
 	@[ "$(NAME)" ] && [ "$(REPO)" ] && [ "$(TAG)" ] || { echo ">> usage: make register NAME=myapp REPO=owner/myapp TAG=v1.3.0 [DIST=dist] [FILE=packages/<app>.<release>.json]"; exit 1; }
 	@case "$(REGISTER_OUT)" in packages/*.json) ;; *) echo "❌ FILE must be packages/<something>.json, got '$(REGISTER_OUT)'"; exit 1;; esac
 	@$(SCRIPTS)/register.sh --name "$(NAME)" --dist-dir "$(DIST)" --repo "$(REPO)" --tag "$(TAG)" --out "$(INSTANCE)/$(REGISTER_OUT)"
@@ -133,7 +138,7 @@ clean: ## remove the built site and caches (keeps packages/, debs/ and the key)
 #==========================================================================================
 
 .PHONY: preview
-preview: ## re-render only the landing page (no signing) — the built site, or a demo page when it has no packages
+preview: ## re-render only the landing page, unsigned (a demo page when no packages)
 	@dir="$(PREVIEW_DIR)"; \
 	 if [ "$$dir" != "$(SITE)" ]; then \
 	   rm -rf "$$dir"; mkdir -p "$$dir"; export DEMO_WHEN_EMPTY=1; \
@@ -155,7 +160,7 @@ themes: ## list the landing-page colour themes (use: make serve THEME=<name>)
 EXAMPLE_DEBS ?= $(ENGINE)/example/debs
 
 .PHONY: example-debs
-example-debs: ## generate sample .debs into example/debs (git-ignored) for a populated local site
+example-debs: ## generate sample .debs into example/debs (git-ignored) for a populated site
 	@bash -c '. "$(ENGINE)/tests/helpers.sh"; d="$(EXAMPLE_DEBS)"; rm -rf "$$d"; \
 	  make_deb "$$d" hello-cli 1.2.0 all any >/dev/null; \
 	  make_deb "$$d/trixie" hello-daemon 0.9.0-1~trixie amd64 trixie >/dev/null; \
@@ -169,7 +174,7 @@ example-debs: ## generate sample .debs into example/debs (git-ignored) for a pop
 #==========================================================================================
 
 .PHONY: key
-key: ## generate a GPG signing key (refuses if one exists; ROTATE=1 adds another for a key rotation)
+key: ## generate a GPG signing key (refuses if one exists; ROTATE=1 adds a second)
 	@[ "$(KEY_EMAIL)" ] || { echo "❌ KEY_EMAIL is empty (set it, or git config user.email)"; exit 1; }
 	@mkdir -p -m 700 "$(GNUPGHOME)"; $(KEYRING_IGNORE)
 	@if [ -z "$(ROTATE)" ] && gpg --batch --list-secret-keys --with-colons 2>/dev/null | grep -q '^sec'; then \
@@ -182,7 +187,7 @@ key: ## generate a GPG signing key (refuses if one exists; ROTATE=1 adds another
 	@echo "✅ signing key created. next: 'make backup-key', then 'make setup-repo REPO=owner/name' and 'make key-to-repo REPO=owner/name'"
 
 .PHONY: backup-key
-backup-key: require-key ## export the PRIVATE signing key(s), armored, into the (git-ignored) keyring dir for a vault backup
+backup-key: require-key ## export the PRIVATE key(s) into the git-ignored keyring dir, for a vault
 	@$(KEYRING_IGNORE)
 	@out="$(GNUPGHOME)/signing-key.secret.asc"; umask 077; gpg --batch --export-secret-keys --armor > "$$out"; \
 	 echo "✅ wrote $$out (armored PRIVATE key — private to you, and git-ignored like the keyring it sits in)"; \
@@ -191,6 +196,27 @@ backup-key: require-key ## export the PRIVATE signing key(s), armored, into the 
 .PHONY: key-info
 key-info: require-key ## show the signing key(s): fingerprint, uid, expiry
 	@gpg --batch --list-secret-keys --keyid-format long
+
+# The local keyring may be the key's last copy besides the APT_SIGNING_KEY secret
+# and your vault, so a bare run only lists what would go. It deletes a directory
+# only when it holds nothing but GnuPG files and the backup (editor swap and
+# backup copies of it included: they hold the key too), and never ~/.gnupg.
+.PHONY: clean-key
+clean-key: ## delete the local keyring and its backup: lists them; CONFIRM=1 deletes
+	@home="$$(cd "$(GNUPGHOME)" 2>/dev/null && pwd -P)" || { echo "✅ no keyring at $(GNUPGHOME), nothing to delete"; exit 0; }; \
+	 case "$$home" in /|"$$(cd "$$HOME" && pwd -P)"|"$$(cd "$$HOME/.gnupg" 2>/dev/null && pwd -P)") \
+	   echo "❌ $$home is not a repository keyring, refusing to delete it"; exit 1;; esac; \
+	 other="$$(find "$$home" -mindepth 1 -maxdepth 1 | while read -r p; do case "$${p##*/}" in \
+	   .gitignore|*signing-key.secret.asc*|pubring.*|secring.*|trustdb.*|private-keys-v1.d|openpgp-revocs.d| \
+	   public-keys.d|random_seed|S.*|.#lk*|*.conf|tofu.db|crls.d|sshcontrol) ;; *) echo "   $$p";; esac; done)"; \
+	 [ -z "$$other" ] || { echo "❌ $$home holds more than a keyring, refusing to delete it:"; echo "$$other"; exit 1; }; \
+	 keys="$$($(LIST_SECRET_KEYS))"; echo ">> $$home holds (fingerprint  uid):"; echo "$${keys:-   no secret key}"; \
+	 find "$$home" -mindepth 1 -maxdepth 1 -name '*signing-key.secret.asc*' | while read -r b; do \
+	   echo "   and the key backup $${b##*/}"; done; \
+	 if [ "$(CONFIRM)" != 1 ]; then \
+	   echo ">> nothing deleted. Once the key is in your vault and the APT_SIGNING_KEY secret: make clean-key CONFIRM=1"; \
+	   exit 0; fi; \
+	 gpgconf --kill all 2>/dev/null || true; rm -rf "$$home"; echo "✅ deleted $$home"
 
 .PHONY: require-key
 require-key:
@@ -206,18 +232,21 @@ require-key:
 TAGS ?= v*
 
 .PHONY: setup-repo
-setup-repo: ## enable Pages (GitHub Actions) + the github-pages environment policy: make setup-repo REPO=owner/name [TAGS='v*']
+setup-repo: ## enable Pages + the github-pages deploy policy: REPO=owner/name [TAGS='v*']
 	@[ "$(REPO)" ] || { echo ">> usage: make setup-repo REPO=owner/name [TAGS='v*']"; exit 1; }
 	@GH="$(GH)" $(SCRIPTS)/setup-repo.sh "$(REPO)" "$(TAGS)"
 
+# A repository secret by default: a calling job can only hand over repository or
+# organization secrets, and a caller owned by another account than the engine
+# gets nothing through `secrets: inherit` or its environment's secrets.
+# ENVIRONMENT=<name> writes an environment secret instead.
 .PHONY: key-to-repo
-key-to-repo: require-key ## store the private key as the APT_SIGNING_KEY secret: make key-to-repo REPO=owner/name [ENVIRONMENT=github-pages]
-	@[ "$(REPO)" ] || { echo ">> usage: make key-to-repo REPO=owner/name [ENVIRONMENT=github-pages]"; exit 1; }
-	@echo ">> uploading every secret key in $(GNUPGHOME) (fingerprint  uid):"; \
-	 gpg --batch --list-secret-keys --with-colons | awk -F: '$$1=="sec"{p=1; next} p&&$$1=="fpr"{fpr=$$10; p=0; next} \
-	   $$1=="ssb"{fpr=""} $$1=="uid"&&fpr!=""{print "   " fpr "  " $$10}'
-	@gpg --batch --export-secret-keys --armor | $(GH) secret set APT_SIGNING_KEY --repo "$(REPO)" --env "$(or $(ENVIRONMENT),github-pages)"
-	@echo "✅ APT_SIGNING_KEY set on $(REPO) (environment $(or $(ENVIRONMENT),github-pages))"
+key-to-repo: require-key ## store the key as secret APT_SIGNING_KEY: REPO=owner/name [ENVIRONMENT=]
+	@[ "$(REPO)" ] || { echo ">> usage: make key-to-repo REPO=owner/name [ENVIRONMENT=<name>]"; exit 1; }
+	@echo ">> uploading every secret key in $(GNUPGHOME) (fingerprint  uid):"; $(LIST_SECRET_KEYS)
+	@gpg --batch --export-secret-keys --armor | $(GH) secret set APT_SIGNING_KEY --repo "$(REPO)" $(if $(ENVIRONMENT),--env "$(ENVIRONMENT)")
+	@echo "✅ APT_SIGNING_KEY set on $(REPO) ($(if $(ENVIRONMENT),environment $(ENVIRONMENT),repository secret))"
+	@echo '>> pass it to the workflow by name:  secrets: { APT_SIGNING_KEY: $${{ secrets.APT_SIGNING_KEY }} }'
 
 #==========================================================================================
 ##@ Engine
@@ -235,9 +264,9 @@ lint: ## lint the workflows (actionlint, through docker)
 .PHONY: verify
 verify: test lint ## check code changes before a push: the tests, then the lint
 
-.PHONY: release
-release: ## tag an engine release (pins the workflow's engine-ref; never pushes): make release VERSION=v1.2.3
-	@[ "$(VERSION)" ] || { echo ">> usage: make release VERSION=vX.Y.Z[-rc.N]"; exit 1; }
+.PHONY: tag
+tag: ## tag and push an engine release (moves vN on a final): VERSION=vX.Y.Z[-rc.N]
+	@[ "$(VERSION)" ] || { echo ">> usage: make tag VERSION=vX.Y.Z[-rc.N]"; exit 1; }
 	@$(SCRIPTS)/release.sh "$(VERSION)"
 
 #==========================================================================================
