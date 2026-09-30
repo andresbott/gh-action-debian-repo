@@ -18,8 +18,10 @@
 #   self: contents: write, pages: write, id-token: write
 #   collection: contents: read
 #   publish-only: contents: read, pages: write, id-token: write
-# The signing key is the APT_SIGNING_KEY secret of the caller's github-pages
-# environment (`make key-to-repo`), or passed explicitly under `secrets:`.
+# The caller passes the signing key by name, from a repository secret
+# (`make key-to-repo`): `secrets: { APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }} }`.
+# `secrets: inherit` passes nothing to a workflow owned by another account, and
+# the caller's environment secrets do not reach it either.
 name: debian-repo
 
 on:
@@ -50,7 +52,7 @@ on:
         type: string
         default: main
       app-id:
-        description: GitHub App allowed to push to the collection (with the app-private-key secret).
+        description: GitHub App allowed to push to the collection (with the app-private-key secret). Falls back to the app-id secret.
         type: string
         default: ''
       self-branch:
@@ -99,13 +101,16 @@ on:
         default: ''
     secrets:
       APT_SIGNING_KEY:
-        description: Armored private signing key. Default = the github-pages environment secret.
+        description: Armored private signing key. Pass it by name, from a repository secret.
         required: false
       collection-token:
         description: Token allowed to push to the collection (when not using app-id).
         required: false
       app-private-key:
         description: Private key of the app-id GitHub App.
+        required: false
+      app-id:
+        description: The app-id input, kept as a secret instead (a caller cannot pass a secret as an input). The input wins when both are set.
         required: false
     outputs:
       mode:
@@ -141,7 +146,7 @@ jobs:
           IN_COLLECTION: ${{ inputs.collection }}
           IN_COLLECTION_BRANCH: ${{ inputs.collection-branch }}
           IN_SELF_BRANCH: ${{ inputs.self-branch }}
-          IN_APP_ID: ${{ inputs.app-id }}
+          IN_APP_ID: ${{ inputs.app-id || secrets.app-id }}
           IN_INSTANCE_REF: ${{ inputs.instance-ref }}
           IN_INSTANCE_PATH: ${{ inputs.instance-path }}
           IN_DISTS: ${{ inputs.dists }}
@@ -163,11 +168,12 @@ jobs:
           path: ${{ runner.temp }}/debrepo-dist
       - name: Mint a collection token
         id: app
-        if: inputs.app-id != ''
+        # an `if:` cannot read secrets: check-mode says whether an App ID was given
+        if: steps.mode.outputs.use-app == 'true'
         uses: actions/create-github-app-token@v3
         with:
           # v3 takes the App ID or the Client ID here (its own app-id is deprecated)
-          client-id: ${{ inputs.app-id }}
+          client-id: ${{ inputs.app-id || secrets.app-id }}
           private-key: ${{ secrets.app-private-key }}
           owner: ${{ steps.mode.outputs.target-owner }}
           repositories: ${{ steps.mode.outputs.target-name }}

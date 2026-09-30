@@ -29,7 +29,7 @@ export GNUPGHOME=~/.apt-keys/myapp               # keep the private key out of e
 make key KEY_NAME="myapp APT repository" KEY_EMAIL=you@example.org
 make backup-key                                  # then move the file into your password vault
 make setup-repo REPO=acme/myapp                  # Pages from Actions + the github-pages environment
-make key-to-repo REPO=acme/myapp                 # APT_SIGNING_KEY secret in that environment (needs setup-repo first)
+make key-to-repo REPO=acme/myapp                 # the APT_SIGNING_KEY repository secret
 ```
 
 - `make key` creates a signing key without a passphrase, because CI signs
@@ -42,8 +42,13 @@ make key-to-repo REPO=acme/myapp                 # APT_SIGNING_KEY secret in tha
   tags matching `v*`. Release tags of another shape need their own pattern, for
   example `TAGS='v* debian_*'`. Running it again keeps the existing Pages and
   policies.
-- `make key-to-repo` stores the private key as the `APT_SIGNING_KEY` secret of
-  that environment. Only the job that deploys can read it.
+- `make key-to-repo` stores the private key as the `APT_SIGNING_KEY`
+  repository secret. The release workflow passes it to the reusable workflow by
+  name: see [the `APT_SIGNING_KEY` secret](reference.md#secrets) for why
+  `secrets: inherit` does not work.
+
+To use a key you already have, or one kept in an instance's `.gnupg-repo/`, see
+[which keyring `make` uses](reference.md#which-keyring-make-uses).
 
 ## The release workflow
 
@@ -83,7 +88,8 @@ jobs:
       dists: bookworm trixie
       aliases: stable:trixie
       arches: amd64 arm64
-    secrets: inherit
+    secrets:
+      APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
 ```
 
 The build decides where each `.deb` goes:
@@ -93,7 +99,9 @@ The build decides where each `.deb` goes:
 
 Upload the whole `dist/` directory as the artifact, so the `<codename>/`
 directories survive. Uploading `dist/trixie/` alone would flatten it and publish
-the build to every release.
+the build to every release. Only the `.deb`s are read, so a flat build can
+upload `path: dist/*.deb` instead. That leaves out the binaries and archives
+that tools such as GoReleaser also write to `dist/`.
 
 When the tag is pushed:
 
@@ -156,7 +164,8 @@ jobs:
       dists: bookworm trixie                     # the same build inputs as the release workflow
       aliases: stable:trixie
       arches: amd64 arm64
-    secrets: inherit
+    secrets:
+      APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}
 ```
 
 Run it from the default branch: the `github-pages` environment lets only the
@@ -172,7 +181,9 @@ running the re-publish workflow above.
 | Symptom | Fix |
 | --- | --- |
 | `Configure Pages` fails with `Get Pages site failed` | Pages is not enabled: `make setup-repo REPO=…` |
-| `❌ no APT_SIGNING_KEY secret` | `make key-to-repo REPO=…`, and call the workflow with `secrets: inherit` |
+| `❌ no APT_SIGNING_KEY secret` | `make key-to-repo REPO=…`, and pass it by name: `APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }}` under `secrets:`. `secrets: inherit` passes nothing to this workflow |
 | `❌ APT_SIGNING_KEY cannot sign unattended` | the stored key has a passphrase: store one made by `make key` |
 | The deploy is refused by the environment's protection rules | the tag does not match the environment's patterns: `make setup-repo REPO=… TAGS='<pattern>'` |
+| `Download the .debs` fails with `Artifact not found for name: debs` | the `artifact` input must match the `name` of the `upload-artifact` step in the same run |
+| `❌ push to 'apt' refused (token scope? branch protection?)` | the calling job lacks `contents: write`, or a ruleset or branch protection covers `apt`: exclude that branch from it |
 | `apt / register` rejects the reference | its message names the problem: a release or architecture you do not publish, a duplicate asset name, or an asset whose sha256 does not match |

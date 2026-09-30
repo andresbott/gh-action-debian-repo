@@ -46,11 +46,17 @@ grep -qx 'api -X PUT repos/acme/debs/pages -f build_type=workflow' "$FAKE_LOG" &
 grep -q 'type=tag' "$FAKE_LOG" && bad "empty TAGS still added a tag policy" || ok "empty TAGS adds no tag policy"
 "$ROOT/scripts/setup-repo.sh" 'not a repo' >/dev/null 2>&1 && bad "invalid repo accepted" || ok "invalid repo rejected"
 
-# make key-to-repo pipes the armored private key into the environment secret
+# make key-to-repo pipes the armored private key into a repository secret, or
+# with ENVIRONMENT= into that environment's secret
 export GNUPGHOME="$tmp/gnupg"; make_test_key "$GNUPGHOME" k@example.org; : > "$FAKE_LOG"
 out="$(make --no-print-directory -f "$ROOT/Makefile" -C "$tmp/cwd" key-to-repo REPO=acme/debs GNUPGHOME="$GNUPGHOME" 2>&1)" || bad "key-to-repo failed: $out"
+grep -q '^secret set APT_SIGNING_KEY --repo acme/debs <<< -----BEGIN PGP PRIVATE KEY BLOCK-----' "$FAKE_LOG" \
+  && ok "key-to-repo sets the APT_SIGNING_KEY repository secret" || bad "key-to-repo: $(cat "$FAKE_LOG")"
+printf '%s' "$out" | grep -qF 'secrets: { APT_SIGNING_KEY: ${{ secrets.APT_SIGNING_KEY }} }' \
+  && ok "key-to-repo shows how to pass the secret" || bad "key-to-repo hint: $out"
+: > "$FAKE_LOG"; make --no-print-directory -f "$ROOT/Makefile" -C "$tmp/cwd" key-to-repo REPO=acme/debs ENVIRONMENT=github-pages GNUPGHOME="$GNUPGHOME" >/dev/null 2>&1
 grep -q '^secret set APT_SIGNING_KEY --repo acme/debs --env github-pages <<< -----BEGIN PGP PRIVATE KEY BLOCK-----' "$FAKE_LOG" \
-  && ok "key-to-repo sets APT_SIGNING_KEY in the github-pages environment" || bad "key-to-repo: $(cat "$FAKE_LOG")"
+  && ok "key-to-repo ENVIRONMENT= sets that environment's secret" || bad "key-to-repo ENVIRONMENT=: $(cat "$FAKE_LOG")"
 # before uploading, it names every secret key it is about to upload
 fpr="$(gpg --batch --list-secret-keys --with-colons 2>/dev/null | awk -F: '$1=="fpr"{print $10; exit}')"
 printf '%s\n' "$out" | grep -qF "$fpr  test <k@example.org>" \

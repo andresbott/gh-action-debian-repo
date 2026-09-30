@@ -13,8 +13,11 @@
 #   IN_DISTS IN_ALIASES IN_ARCHES IN_REPO_NAME IN_SITE_TITLE IN_SITE_TAGLINE IN_THEME
 #   (the build inputs; rejected in collection mode, where they would be ignored)
 #   REF_TYPE REF_NAME (github.ref_type / github.ref_name) GITHUB_REPOSITORY
+# IN_APP_ID is the app-id input, or else the app-id secret: only tested for
+# being set, never printed.
 # Writes mode=, tag=, branch= and target= (the repository the reference is
-# pushed to: owner/name, plus target-owner= and target-name=) to $GITHUB_OUTPUT.
+# pushed to: owner/name, plus target-owner= and target-name=) to $GITHUB_OUTPUT,
+# and use-app= (true: mint the collection token from the App).
 set -euo pipefail
 
 errs=()
@@ -71,5 +74,6 @@ if [ ${#errs[@]} -gt 0 ]; then
   exit 1
 fi
 echo "✅ mode: $mode${target:+ -> $target@$branch}${tag:+ (release $tag)}"
-[ -z "${GITHUB_OUTPUT:-}" ] || printf 'mode=%s\ntag=%s\nbranch=%s\ntarget=%s\ntarget-owner=%s\ntarget-name=%s\n' \
-  "$mode" "$tag" "$branch" "$target" "${target%%/*}" "${target#*/}" >> "$GITHUB_OUTPUT"
+use_app=false; [ "$mode" != collection ] || [ -z "$(v IN_APP_ID)" ] || use_app=true
+[ -z "${GITHUB_OUTPUT:-}" ] || printf 'mode=%s\ntag=%s\nbranch=%s\ntarget=%s\ntarget-owner=%s\ntarget-name=%s\nuse-app=%s\n' \
+  "$mode" "$tag" "$branch" "$target" "${target%%/*}" "${target#*/}" "$use_app" >> "$GITHUB_OUTPUT"
