@@ -128,7 +128,7 @@ jobs:
         with:
           repository: andresbott/gh-action-debian-repo
           # rewritten by scripts/release.sh: each release runs its own scripts
-          ref: ${{ inputs.engine-ref || 'v1.0.0-rc.1' }}
+          ref: ${{ inputs.engine-ref || 'v1.0.0-rc.2' }}
           path: .debrepo-engine
           persist-credentials: false
       - name: Check the inputs
@@ -218,7 +218,7 @@ jobs:
         with:
           repository: andresbott/gh-action-debian-repo
           # rewritten by scripts/release.sh: each release runs its own scripts
-          ref: ${{ inputs.engine-ref || 'v1.0.0-rc.1' }}
+          ref: ${{ inputs.engine-ref || 'v1.0.0-rc.2' }}
           path: .debrepo-engine
           persist-credentials: false
       - name: Configure Pages
