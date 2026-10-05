@@ -14,6 +14,13 @@ workflow:
 A client's push is what triggers the collection's run, so a release goes live
 shortly after the client's workflow finishes.
 
+The two sides keep separate credentials, in separate places:
+
+| Credential | Stored on | Set up in |
+| --- | --- | --- |
+| `APT_SIGNING_KEY`: the signing key | the collection only, as a repository secret | [one-time setup](#one-time-setup) |
+| `APT_APP_ID` and `APT_APP_PRIVATE_KEY`: the GitHub App a client pushes with | every client. An organization shares one copy with all the clients it owns. A personal account needs a copy on each client | [credentials for the clients](#credentials-for-the-clients) |
+
 ## The collection repository
 
 The collection is an instance repository:
@@ -86,8 +93,10 @@ collection's workflow anyway.
 - **A GitHub App** (recommended). Every run mints a short-lived token from it,
   scoped to the collection.
 - **A fine-grained token** with *Contents: Read and write* on the collection
-  only. Store it as a secret on the client and pass it as `collection-token`
-  instead of `app-id`.
+  only. Store it as the secret `APT_COLLECTION_TOKEN`, wherever
+  [step 4](#setting-up-the-app) puts the App key, and pass it as
+  `collection-token: ${{ secrets.APT_COLLECTION_TOKEN }}` instead of `app-id`
+  and `app-private-key`.
 
 ### Setting up the App
 
@@ -108,28 +117,45 @@ collection's workflow anyway.
    the account. Choose *Only select repositories* and pick `acme/apt`.
 4. **Give the clients the App ID and the key**. The key goes in the secret
    `APT_APP_PRIVATE_KEY`, and the ID in `APT_APP_ID`, as a variable or a
-   secret:
+   secret. Every client gets the same two values. Where they are stored
+   depends on who owns each client, not on who owns the collection:
 
-   ```bash
-   # an organization: once, shared with the listed clients
-   gh variable set APT_APP_ID --org acme --repos myapp,tools --body 123456
-   gh secret set APT_APP_PRIVATE_KEY --org acme --repos myapp,tools < app.private-key.pem
-   # a personal account has no account-wide secrets: set both on each client
-   gh variable set APT_APP_ID --repo you/myapp --body 123456
-   gh secret set APT_APP_PRIVATE_KEY --repo you/myapp < app.private-key.pem
-   ```
+   - **Clients an organization owns** share one copy, stored once in that
+     organization:
+
+     ```bash
+     gh variable set APT_APP_ID --org acme --repos myapp,tools --body 123456
+     gh secret set APT_APP_PRIVATE_KEY --org acme --repos myapp,tools < app.private-key.pem
+     ```
+
+   - **Clients a personal account owns** need a copy each, because a personal
+     account has no account-wide secrets:
+
+     ```bash
+     gh variable set APT_APP_ID --repo you/myapp --body 123456
+     gh secret set APT_APP_PRIVATE_KEY --repo you/myapp < app.private-key.pem
+     ```
+
+   Clients under several owners combine the two: one copy per organization,
+   plus one on each personal client. In the web UI, both live under
+   *Settings → Secrets and variables → Actions*, of the organization or of the
+   client.
 
    To keep the ID as a secret too, use `gh secret set APT_APP_ID` with the same
    flags instead of `gh variable set`. The [client workflow](#a-client) reads
    the variable, and falls back to the secret when there is none.
 
-   Then move the `.pem` into your password vault and `shred -u` it.
+   Then move the `.pem` into your password vault and `shred -u` it. It is the
+   App's key, not the signing key: `APT_SIGNING_KEY` stays on the collection,
+   and no client gets it.
 
-An organization variable or secret only reaches the repositories its visibility
-allows. The `gh` default, `private`, leaves out public repositories, and every
-client is public. `--repos` names the clients. To add one later, run both
-commands again with the longer list. `--visibility all` shares them with every
-repository in the organization instead, so any of them could publish.
+An organization variable or secret only reaches repositories of that
+organization, and only those its visibility allows. The `gh` default,
+`private`, leaves out public repositories, and every client is public.
+`--repos` names the clients, and each run replaces the list. To add a client
+later, run both commands again with the full list, reading the key back from
+your vault. `--visibility all` shares them with every repository in the
+organization instead, so any of them could publish.
 
 `APT_APP_ID` takes the numeric App ID. The workflow passes it to
 `actions/create-github-app-token` as `client-id`, which accepts either the App
@@ -162,6 +188,13 @@ A change that rejects an existing reference makes the next publish fail until
 that reference is removed or re-registered.
 
 ## A client
+
+Each client needs three things:
+
+1. its packages in [`owners.conf`](#who-may-publish-what-ownersconf), when the
+   collection has one;
+2. the App ID and key, from [step 4](#setting-up-the-app) of the App setup;
+3. the `apt` job below, in its release workflow.
 
 A client builds and releases its `.deb`s exactly as in
 [self mode](self-mode.md#the-release-workflow), then pushes a reference into the
@@ -274,8 +307,8 @@ means any push, or `gh workflow run publish.yml --repo acme/apt`.
 
 | Symptom | Fix |
 | --- | --- |
-| `❌ app-id is set but the app-private-key secret is not` | the client has `APT_APP_ID` but not the `APT_APP_PRIVATE_KEY` secret, or the secret's visibility leaves the client out |
-| `❌ collection mode needs credentials for acme/apt` | pass `app-id` (input or secret) with the `app-private-key` secret, or the `collection-token` secret. An organization `APT_APP_ID` whose visibility leaves the client out looks the same |
+| `❌ app-id is set but the app-private-key secret is not` | the client has `APT_APP_ID` but not the `APT_APP_PRIVATE_KEY` secret, or the secret does not reach it: its visibility leaves the client out, or it is an organization secret and another account owns the client |
+| `❌ collection mode needs credentials for acme/apt` | pass `app-id` (input or secret) with the `app-private-key` secret, or the `collection-token` secret. An organization `APT_APP_ID` that does not reach the client (its visibility, or another account owns the client) looks the same |
 | `Mint a collection token` fails with `Not Found` | the App is not installed on the collection: *Install App*, then add `acme/apt` to its repositories |
 | `Download the .debs` fails with `Artifact not found for name: debs` | the `artifact` input must match the `name` of the `upload-artifact` step in the same run |
 | `❌ push to 'main' refused (token scope? branch protection?)` | the branch requires pull requests: [add the App to the bypass list](#a-protected-branch) |
