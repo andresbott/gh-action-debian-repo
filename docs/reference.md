@@ -32,15 +32,24 @@ They never move `@v1`, so you have to pin one to use it.
 ### Secrets
 
 - `APT_SIGNING_KEY`: the signing key, used by the deploying job only (self and
-  publish-only calls).
+  publish-only calls). `make key-to-repo` stores it as a repository secret of
+  the repository that deploys: the self-mode repository, or the collection.
+  Collection clients never get it.
 - `collection-token`: a token that can push to the collection, instead of
   `app-id`.
-- `app-private-key`: the private key of the `app-id` App.
+- `app-private-key`: the private key of the `app-id` App, not the signing key.
 - `app-id`: the App ID, for callers that keep it as a secret. A calling job
   cannot pass a secret as an input, so this is the secret's way in. The
   `app-id` input wins when both are set.
 
-Pass each one by name, from a repository or organization secret:
+The last three belong to collection clients, and every client holds the same
+values. An organization stores one copy for all the clients it owns, and a
+personal account a copy on each client: see
+[credentials for the clients](collection-mode.md#credentials-for-the-clients).
+In the web UI, secrets live under *Settings → Secrets and variables → Actions*,
+of the repository or of the organization.
+
+Pass each one by name:
 
 ```yaml
     secrets:
@@ -49,16 +58,17 @@ Pass each one by name, from a repository or organization secret:
 
 `secrets: inherit` does not work here. GitHub honours it only when the caller
 is in the same organization as the workflow, so from any other account it
-passes nothing. The caller's environment secrets do not reach the workflow
+passes nothing. Such a caller's environment secrets do not reach the workflow
 either, and a calling job cannot hand one over. That is why `make key-to-repo`
 stores `APT_SIGNING_KEY` as a repository secret. Every workflow in the
 repository can read a repository secret, not only the deploying job. The
 `github-pages` environment still decides which refs may deploy.
 
-Keep a single copy of the key. GitHub gives an environment secret precedence
-over a passed one, so an `APT_SIGNING_KEY` left in the `github-pages`
-environment by an older setup can override the repository secret. Delete it
-with `gh secret delete APT_SIGNING_KEY --repo … --env github-pages`.
+Keep a single copy of the key. Where an environment secret does reach the
+workflow, GitHub gives it precedence over a passed one, so an `APT_SIGNING_KEY`
+left in the `github-pages` environment by an older setup can override the
+repository secret. Delete it with
+`gh secret delete APT_SIGNING_KEY --repo … --env github-pages`.
 
 ### Outputs
 
